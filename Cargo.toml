@@ -1,0 +1,44 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/domain",
+    "crates/application",
+    "crates/infrastructure",
+    "crates/shared-dto",
+    "src-tauri",
+    "ui",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+publish = false
+
+[workspace.dependencies]
+# Couches internes (règle de dépendance : infrastructure -> application -> domain)
+lc-domain = { path = "crates/domain" }
+lc-application = { path = "crates/application" }
+lc-infrastructure = { path = "crates/infrastructure" }
+lc-shared-dto = { path = "crates/shared-dto" }
+
+# Communes
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true
+panic = "abort"
+
+# UI WebAssembly : on optimise la taille du bundle plutôt que la vitesse
+[profile.release.package.lc-ui]
+opt-level = "z"

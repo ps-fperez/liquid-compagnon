@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+@source "../src";
+
+/* Thème "Purple Electro" — sombre uniquement */
+@theme {
+  --color-primary: #a855f7;
+  --color-primary-strong: #7c3aed;
+  --color-primary-soft: #c084fc;
+  --color-secondary: #3b82f6;
+  --color-secondary-light: #60a5fa;
+  --color-bg: #0b0614;
+  --color-surface: #160e26;
+  --color-surface-raised: #1f1535;
+  --color-ink: #f5f3ff;
+  --color-muted: #a7a3c2;
+  --color-gain: #34d399;
+  --color-loss: #f87171;
+
+  --shadow-glow-primary: 0 0 24px -4px rgb(168 85 247 / 0.55);
+  --shadow-glow-secondary: 0 0 20px -2px rgb(59 130 246 / 0.6);
+  --shadow-glow-gain: 0 0 14px -2px rgb(52 211 153 / 0.5);
+  --shadow-glow-loss: 0 0 14px -2px rgb(248 113 113 / 0.5);
+
+  --animate-glow-pulse: glow-pulse 2.4s ease-in-out infinite;
+
+  @keyframes glow-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 16px -4px rgb(59 130 246 / 0.5);
+    }
+    50% {
+      box-shadow: 0 0 28px 0 rgb(59 130 246 / 0.75);
+    }
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    min-height: 100dvh;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+      env(safe-area-inset-left);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

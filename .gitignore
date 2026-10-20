@@ -1,0 +1,18 @@
+# Build Rust
+/target/
+
+# Build UI (Trunk)
+/ui/dist/
+
+# Généré par Tauri
+/src-tauri/gen/schemas/
+
+# Secrets de signature Android — ne jamais versionner
+*.jks
+*.keystore
+keystore.properties
+
+# Divers
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,14 @@
+[build]
+target = "index.html"
+dist = "dist"
+
+[watch]
+watch = [".", "../crates/shared-dto"]
+ignore = ["dist"]
+
+[serve]
+port = 1420
+open = false
+
+[tools]
+tailwindcss = "4.3.3"

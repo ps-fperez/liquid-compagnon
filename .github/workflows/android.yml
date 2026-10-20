@@ -1,0 +1,127 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  TRUNK_VERSION: v0.22.0
+
+jobs:
+  check:
+    name: Qualité (fmt, clippy, tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dépendances système Tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+
+  apk:
+    name: APK Android (arm64)
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: android
+
+      # Le plugin Gradle généré appelle `cargo tauri` : on installe la CLI Rust (mise en cache par rust-cache).
+      - name: Outils (Trunk, Tauri CLI)
+        run: |
+          command -v trunk || curl -sSL "https://github.com/trunk-rs/trunk/releases/download/${TRUNK_VERSION}/trunk-x86_64-unknown-linux-gnu.tar.gz" \
+            | tar -xz -C "$HOME/.cargo/bin"
+          command -v cargo-tauri || cargo install tauri-cli --version "^2" --locked
+
+      - name: Clé de signature (si configurée)
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            {
+              echo "storeFile=$RUNNER_TEMP/release.jks"
+              echo "password=$KEYSTORE_PASSWORD"
+              echo "keyAlias=$KEY_ALIAS"
+            } > src-tauri/gen/android/keystore.properties
+            echo "BUILD_KIND=release" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Aucune clé de signature : APK de debug (désinstallation requise à chaque mise à jour). Voir scripts/new-keystore.ps1."
+            echo "BUILD_KIND=debug" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build APK
+        run: |
+          export NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          if [ "$BUILD_KIND" = "release" ]; then
+            cargo tauri android build --apk --target aarch64
+          else
+            cargo tauri android build --apk --debug --target aarch64
+          fi
+          APK=$(find src-tauri/gen/android/app/build/outputs/apk -name '*.apk' | head -n 1)
+          OUT="liquid-compagnon-${GITHUB_REF_NAME//\//-}-${GITHUB_SHA::7}-${BUILD_KIND}.apk"
+          cp "$APK" "$OUT"
+          echo "APK_FILE=$OUT" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APK_FILE }}
+          path: ${{ env.APK_FILE }}
+          retention-days: 30
+
+      # Dernier build de main : URL fixe à ouvrir depuis le téléphone (…/releases/tag/dernier-build)
+      - name: Publier « dernier-build »
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete dernier-build --cleanup-tag --yes || true
+          gh release create dernier-build "$APK_FILE" \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "Dernier build (${GITHUB_SHA::7})" \
+            --notes "APK construit automatiquement depuis main. Build : $BUILD_KIND."
+
+      - name: Publier la version
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "$APK_FILE" \
+            --title "Liquid Compagnon $GITHUB_REF_NAME" \
+            --generate-notes

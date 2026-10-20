@@ -1,0 +1,15 @@
+[package]
+name = "lc-infrastructure"
+description = "Adaptateurs de Liquid Compagnon : SQLite, fournisseurs de cours, horloge"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+lc-domain.workspace = true
+lc-application.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

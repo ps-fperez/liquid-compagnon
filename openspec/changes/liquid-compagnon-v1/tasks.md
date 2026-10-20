@@ -1,0 +1,90 @@
+## 1. Environnement et toolchain Android
+
+- [x] 1.1 Installer le SDK Android en ligne de commande (sans Android Studio) : cmdline-tools, platform-tools, platform android-36, build-tools 36.1.0, NDK 29.0.14206865 ; définir `ANDROID_HOME`, `NDK_HOME` et `JAVA_HOME` (JDK 24 ; repli sur un JDK 21 si Gradle le refuse)
+- [x] 1.2 Ajouter les cibles Rust Android (`aarch64-linux-android`, `armv7-linux-androideabi`, `x86_64-linux-android`, `i686-linux-android`) et `wasm32-unknown-unknown` ; installer `tauri-cli` 2 et `trunk` (wasm-bindgen-cli est téléchargé par Trunk à la bonne version)
+- [ ] 1.3 Choisir le canal de transfert de l'APK vers le téléphone sans liaison USB (la connexion téléphone ↔ PC est interdite) et autoriser « Installer des applis inconnues » pour l'application de ce canal
+- [ ] 1.4 (Optionnel) Installer un émulateur Android si la virtualisation est autorisée sur le poste, pour tester biométrie et `FLAG_SECURE` sans téléphone
+
+## 2. Squelette du workspace
+
+- [x] 2.1 Créer le workspace Cargo (`crates/domain`, `crates/application`, `crates/infrastructure`, `crates/shared-dto`, `src-tauri`, `ui`) avec les dépendances inter-crates conformes à la règle de dépendance (D2)
+- [x] 2.2 Initialiser Tauri 2 dans `src-tauri` (identifiant `com.liquidcompagnon.app`, nom « Liquid Compagnon ») et `cargo tauri android init`
+- [x] 2.3 Initialiser l'UI Leptos CSR avec Trunk et Tailwind v4 ; câbler `beforeDevCommand` / `beforeBuildCommand` / `frontendDist` dans `tauri.conf.json`
+- [ ] 2.4 Commande Tauri `ping` appelée depuis l'UI ; vérifier le fonctionnement en `cargo tauri dev` sur le PC (fenêtre au format téléphone 412 × 892)
+- [x] 2.5 Configurer les profils release (`opt-level="z"`, `lto`, `wasm-opt`), `rustfmt.toml`, clippy, `.gitignore`, et un script de vérification (`fmt` + `clippy -D warnings` + `test`)
+- [ ] 2.6 Générer un premier APK signé (`cargo tauri android build --apk`, keystore hors dépôt documentée dans le README), le transférer par le canal retenu en 1.3 et l'installer sur le téléphone
+
+## 3. Domaine — fondations
+
+- [ ] 3.1 Value objects `Money` (Decimal EUR, opérations checkées), `Rate`, `Month` (année-mois), identifiants (`uuid`) + tests unitaires et proptest
+- [ ] 3.2 Entités budget : `SalaryEntry`, `OneOffIncome`, `RecurringCharge` (périodicité, début/fin), `Expense`, `Category` + validations (montant > 0, 2 décimales) + tests
+- [ ] 3.3 Entités comptes : `Account`, `AccountKind` (Savings / Securities / EmployeeSavings), `Position`, `AssetRef`, `PeiFund`, `NavAnchor`, `ScenarioRates` + tests
+- [ ] 3.4 `Snapshot` et règles (un auto par mois, comptes archivés exclus du courant) + tests
+- [ ] 3.5 `domain::defaults` : catégories par défaut, taux et plafonds réglementés nommés, rendements par défaut par type de compte (D8) + tests
+
+## 4. Domaine — services métier
+
+- [ ] 4.1 `BudgetCalculator` : salaire applicable à un mois, revenus ponctuels du mois, équivalent mensuel des charges actives + tests des scénarios `income-management` et `expense-tracking`
+- [ ] 4.2 `BudgetCalculator::savings_capacity` : moyenne des dépenses des 3 derniers mois complets avec replis (< 3 mois, aucun mois) + tests
+- [ ] 4.3 `PriceBook` et `Valuation` : valeur des comptes Savings / Securities, plus-value latente, provenance (Live / Cached / Estimated / Manual) + tests
+- [ ] 4.4 `PeiEstimator` : estimation par indice, fonds sans référence, recalage manuel + tests (scénario 25 € → 26 €)
+- [ ] 4.5 `ProjectionEngine` : capitalisation mensuelle `(1+r)^(1/12)` en décimal, versements programmés + tests (10 000 € à 3 % → 10 300 € ; 10 000 € + 6 × 300 € → 11 800 €)
+- [ ] 4.6 `ProjectionEngine` : plafonds livrets, épargne non affectée, avertissement de versements excessifs, 3 scénarios × 3/6/12 mois + tests
+
+## 5. Application — ports et cas d'usage
+
+- [ ] 5.1 Définir les ports (D4) : `AccountRepository`, `BudgetRepository`, `SnapshotRepository`, `PriceCache`, `PriceProvider`, `SecretStore`, `BackupCodec`, `Clock` + fakes en mémoire pour les tests
+- [ ] 5.2 Cas d'usage sécurité : `SetupPin`, `Unlock` (compteur d'échecs, délai exponentiel à partir de 30 s), `ChangePin` + tests
+- [ ] 5.3 Cas d'usage budget : `AddSalary`, `AddOneOffIncome`, `UpsertRecurringCharge`, `AddExpense`, `ListExpenses` (mois, catégorie, total), `ManageCategories` (archivage si utilisée) + tests
+- [ ] 5.4 Cas d'usage comptes : `CreateAccount`, `UpdateAccount`, `UpdateSavingsBalance`, `UpsertPosition`, `UpsertPeiFund`, `RecordPeiNav` (capture du cours de référence), archivage + tests
+- [ ] 5.5 `PricingService` : routage par provider, TTL 5 min, repli cache, gestion 429, provenance ; `RefreshPrices` et `SearchAsset` + tests
+- [ ] 5.6 `GetDashboard` (total, répartition %, variation vs dernier snapshot, indicateurs budgétaires) et `TakeSnapshotIfDue` + tests
+- [ ] 5.7 `GetProjection` et `UpdateScenarioRates` + tests
+- [ ] 5.8 `FullDataset` versionné, `ExportData` (sans hash PIN ni clé API) et `ImportData` (validation complète avant écriture, refus des versions futures, chaîne de migrations) + tests
+
+## 6. Infrastructure
+
+- [ ] 6.1 Connexion SQLite (`rusqlite` bundled) + migration initiale de toutes les tables (D6) via `rusqlite_migration` + test de migration sur `:memory:`
+- [ ] 6.2 `SqliteAccountRepository` (comptes, détails livrets, positions, fonds PEI, ancrages) + tests d'intégration
+- [ ] 6.3 `SqliteBudgetRepository` (salaires, revenus ponctuels, charges, dépenses, catégories par défaut au premier lancement) + tests d'intégration
+- [ ] 6.4 `SqliteSnapshotRepository`, `SqlitePriceCache`, `SqliteSecretStore` (Argon2id) + tests d'intégration
+- [ ] 6.5 `CoinGeckoProvider` (`/simple/price` groupé, `/search`) avec `reqwest` rustls + tests `wiremock`
+- [ ] 6.6 `TwelveDataProvider` (`/price` batch, `/symbol_search`, `/exchange_rate` → EUR, espacement des requêtes, 429) + tests `wiremock`
+- [ ] 6.7 `JsonBackupCodec` (serde_json, `schema_version`) + tests aller-retour export → import
+- [ ] 6.8 `SystemClock` et transaction d'import « tout remplacer » + test de non-modification en cas d'échec
+
+## 7. Présentation Tauri (src-tauri)
+
+- [ ] 7.1 DTO dans `shared-dto` (dashboard, comptes, positions, budget, projection, réglages) et mappers domaine → DTO dans `src-tauri`
+- [ ] 7.2 Composition root : instanciation des adaptateurs, injection `Arc<dyn Port>` dans les use cases, état Tauri managé
+- [ ] 7.3 Commandes Tauri pour tous les use cases (appels DB en `spawn_blocking`), erreurs mappées en messages utilisateur français
+- [ ] 7.4 Garde de verrouillage côté backend : refus des commandes métier tant que la session n'est pas déverrouillée ; verrouillage après 60 s en arrière-plan (événements de cycle de vie)
+- [ ] 7.5 Plugins `tauri-plugin-biometric`, `tauri-plugin-dialog`, `tauri-plugin-fs` + permissions (capabilities) minimales
+- [ ] 7.6 Android : `FLAG_SECURE` dans `MainActivity.kt`, `android:allowBackup="false"` et permission `INTERNET` uniquement dans le manifeste
+
+## 8. UI — fondations et thème
+
+- [ ] 8.1 Design tokens Tailwind (`@theme` : couleurs, `shadow-glow-*`, `animate-glow-pulse`, `prefers-reduced-motion`), police, fond sombre forcé
+- [ ] 8.2 Module `ui::api` typé (wrapper `invoke` par commande) et module `ui::format` (montants FR, dates JJ/MM/AAAA, saisie virgule/point)
+- [ ] 8.3 Composants de base : `AmountInput` (clavier décimal), `Card`, `GlowCard`, `Badge` provenance, `BottomSheet`, `ListRow`, cibles ≥ 44 px
+- [ ] 8.4 Shell : routeur, barre de navigation inférieure (onglet actif avec glow, bouton « + » central pulsant), en-tête avec réglages et mode discret, gestion du bouton retour Android
+- [ ] 8.5 Graphiques SVG en Rust : barre de répartition, courbe d'évolution, courbes de projection (neutre mise en avant)
+
+## 9. UI — écrans
+
+- [ ] 9.1 Écrans de création du PIN et de verrouillage (pavé numérique, biométrie, compte à rebours après 5 échecs)
+- [ ] 9.2 Dashboard : carte patrimoine (glow, dégradé), variation, barre de répartition, liste des comptes avec provenance, indicateurs budgétaires, courbe 6 mois / 1 an / tout, tirer pour rafraîchir, flash de mise à jour des cours
+- [ ] 9.3 Comptes : liste, création (type, nom, couleur, versement programmé), détail livret (solde, taux, plafond)
+- [ ] 9.4 Détail PEA / crypto : positions, recherche d'actif, quantité, prix de revient, plus-value latente, solde espèces
+- [ ] 9.5 Détail PEI : fonds, actif de référence, saisie de valeur de part (réel vs estimée)
+- [ ] 9.6 Budget : salaire et historique, revenus ponctuels, charges fixes, dépenses du mois (filtre catégorie, total), gestion des catégories, capacité d'épargne
+- [ ] 9.7 Saisie rapide « + » : dépense en 3 interactions, revenu ponctuel, mise à jour de solde
+- [ ] 9.8 Projection : sélecteur 3 / 6 / 12 mois, 3 courbes, tableau par compte, épargne non affectée, avertissements, édition des rendements par scénario
+- [ ] 9.9 Réglages : biométrie, changement de PIN, clé Twelve Data (+ test de la clé), export / import JSON avec avertissements, rappel d'export > 30 jours
+
+## 10. Vérification et livraison
+
+- [ ] 10.1 Parcourir chaque scénario des specs sur le téléphone (checklist dans `docs/recette-v1.md`), corriger les écarts
+- [ ] 10.2 Tests hors ligne (mode avion), quota API atteint, clé absente, import invalide
+- [ ] 10.3 Vérifier `openspec validate liquid-compagnon-v1`, `cargo clippy -D warnings`, `cargo test --workspace` au vert
+- [ ] 10.4 Build APK release signé, installation sur le téléphone, README (build, installation, sauvegarde)

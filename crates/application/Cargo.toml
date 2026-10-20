@@ -1,0 +1,14 @@
+[package]
+name = "lc-application"
+description = "Cas d'usage et ports (traits) de Liquid Compagnon"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+lc-domain.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,34 @@
+schema: spec-driven
+
+context: |
+  Produit : "Liquid Compagnon" — application Android personnelle (un seul utilisateur) de gestion
+  de patrimoine et d'épargne. Langue de l'UI et de la documentation : français.
+
+  Stack :
+  - Tauri 2 (cible Android, APK installable — PAS de PWA)
+  - Backend Rust natif (src-tauri) : persistance, appels HTTP, parsing
+  - Frontend Leptos (CSR, compilé en WebAssembly via Trunk) + Tailwind CSS v4
+  - SQLite local (rusqlite, migrations embarquées) dans le répertoire privé de l'app
+  - Montants : rust_decimal (jamais f64), devise EUR
+  - Cours : CoinGecko (crypto, sans clé) ; Twelve Data (ETF/actions, clé gratuite saisie par l'utilisateur)
+
+  Architecture : Clean Architecture + SOLID, workspace Cargo :
+  - crates/domain : entités et règles métier pures, aucune dépendance I/O
+  - crates/application : cas d'usage + ports (traits) ; dépend uniquement de domain
+  - crates/infrastructure : adaptateurs (SQLite, HTTP, horloge) implémentant les ports
+  - crates/shared-dto : DTO sérialisables partagés entre UI et backend
+  - src-tauri : composition root + commandes Tauri (présentation)
+  - ui : Leptos, ne dépend que de shared-dto
+  Règle de dépendance vers l'intérieur, imposée par le graphe de crates.
+
+  Contraintes produit :
+  - Aucune donnée hébergée : rien ne quitte le téléphone hormis les requêtes de cours (identifiants d'actifs uniquement)
+  - Thème sombre uniquement, style "Purple Electro" (primary violet #A855F7, secondary bleu #3B82F6), glow ciblé
+  - Mobile-first, utilisable à une main
+
+rules:
+  specs:
+    - Rédiger en français ; utiliser le mot-clé normatif "SHALL" ou "MUST" dans chaque exigence pour la validation OpenSpec
+  tasks:
+    - Découper en tâches de 2 h maximum
+    - Chaque tâche de domain/application est livrée avec ses tests unitaires
