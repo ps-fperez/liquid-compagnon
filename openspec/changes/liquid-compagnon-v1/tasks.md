@@ -2,7 +2,7 @@
 
 - [x] 1.1 Installer le SDK Android en ligne de commande (sans Android Studio) : cmdline-tools, platform-tools, platform android-36, build-tools 36.1.0, NDK 29.0.14206865 ; définir `ANDROID_HOME`, `NDK_HOME` et `JAVA_HOME` (JDK 24 ; repli sur un JDK 21 si Gradle le refuse)
 - [x] 1.2 Ajouter les cibles Rust Android (`aarch64-linux-android`, `armv7-linux-androideabi`, `x86_64-linux-android`, `i686-linux-android`) et `wasm32-unknown-unknown` ; installer `tauri-cli` 2 et `trunk` (wasm-bindgen-cli est téléchargé par Trunk à la bonne version)
-- [ ] 1.3 Choisir le canal de transfert de l'APK vers le téléphone sans liaison USB (la connexion téléphone ↔ PC est interdite) et autoriser « Installer des applis inconnues » pour l'application de ce canal
+- [x] 1.3 Choisir le canal de transfert de l'APK vers le téléphone sans liaison USB (la connexion téléphone ↔ PC est interdite) et autoriser « Installer des applis inconnues » pour l'application de ce canal
 - [ ] 1.4 (Optionnel) Installer un émulateur Android si la virtualisation est autorisée sur le poste, pour tester biométrie et `FLAG_SECURE` sans téléphone
 
 ## 2. Squelette du workspace
