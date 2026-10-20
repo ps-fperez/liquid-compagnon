@@ -17,11 +17,11 @@
 
 ## 3. Domaine — fondations
 
-- [ ] 3.1 Value objects `Money` (Decimal EUR, opérations checkées), `Rate`, `Month` (année-mois), identifiants (`uuid`) + tests unitaires et proptest
-- [ ] 3.2 Entités budget : `SalaryEntry`, `OneOffIncome`, `RecurringCharge` (périodicité, début/fin), `Expense`, `Category` + validations (montant > 0, 2 décimales) + tests
-- [ ] 3.3 Entités comptes : `Account`, `AccountKind` (Savings / Securities / EmployeeSavings), `Position`, `AssetRef`, `PeiFund`, `NavAnchor`, `ScenarioRates` + tests
-- [ ] 3.4 `Snapshot` et règles (un auto par mois, comptes archivés exclus du courant) + tests
-- [ ] 3.5 `domain::defaults` : catégories par défaut, taux et plafonds réglementés nommés, rendements par défaut par type de compte (D8) + tests
+- [x] 3.1 Value objects `Money` (Decimal EUR, opérations checkées), `Rate`, `Month` (année-mois), identifiants (`uuid`) + tests unitaires et proptest
+- [x] 3.2 Entités budget : `SalaryEntry`, `OneOffIncome`, `RecurringCharge` (périodicité, début/fin), `Expense`, `Category` + validations (montant > 0, 2 décimales) + tests
+- [x] 3.3 Entités comptes : `Account`, `AccountKind` (Savings / Securities / EmployeeSavings), `Position`, `AssetRef`, `PeiFund`, `NavAnchor`, `ScenarioRates` + tests
+- [x] 3.4 `Snapshot` et règles (un auto par mois, comptes archivés exclus du courant) + tests
+- [x] 3.5 `domain::defaults` : catégories par défaut, taux et plafonds réglementés nommés, rendements par défaut par type de compte (D8) + tests
 
 ## 4. Domaine — services métier
 

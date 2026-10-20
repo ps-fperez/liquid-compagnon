@@ -8,6 +8,13 @@ publish.workspace = true
 
 [dependencies]
 thiserror.workspace = true
+rust_decimal.workspace = true
+rust_decimal_macros.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
 
 [lints]
 workspace = true
