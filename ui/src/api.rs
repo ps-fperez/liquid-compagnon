@@ -124,6 +124,8 @@ commands_with_input! {
     upsert_position(PositionInput) -> ();
     remove_position(RemovePositionInput) -> ();
     search_assets(AssetSearchInput) -> Vec<AssetDto>;
+    /// Offre associée à la clé (`None` pour une source sans compte).
+    price_source_status(QuoteSourceDto) -> Option<String>;
     create_pei_fund(NewFundInput) -> String;
     update_pei_fund(FundUpdateInput) -> ();
     record_pei_nav(FundNavInput) -> ();

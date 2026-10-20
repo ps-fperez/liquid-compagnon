@@ -1,6 +1,6 @@
 # Liquid Compagnon
 
-Application Android personnelle de suivi de patrimoine et d'épargne : vue agrégée des comptes (Livret A, LDDS, PEA, PEI, crypto), budget, cours en temps réel et projection à 3, 6 et 12 mois. Toutes les données restent sur le téléphone (SQLite local, aucune sauvegarde cloud) ; seuls les identifiants d'actifs partent vers CoinGecko et Twelve Data pour les cours.
+Application Android personnelle de suivi de patrimoine et d'épargne : vue agrégée des comptes (Livret A, LDDS, PEA, PEI, crypto), budget, cours en temps réel et projection à 3, 6 et 12 mois. Toutes les données restent sur le téléphone (SQLite local, aucune sauvegarde cloud) ; seuls les identifiants d'actifs partent vers CoinGecko, Yahoo Finance et Twelve Data pour les cours.
 
 Spécification : [`openspec/changes/liquid-compagnon-v1`](openspec/changes/liquid-compagnon-v1/). Recette : [`docs/recette-v1.md`](docs/recette-v1.md).
 
@@ -47,7 +47,15 @@ Réglages › **Exporter mes données** écrit un fichier JSON (sélecteur de fi
 
 ### Cours des ETF
 
-Les crypto-actifs (CoinGecko) ne demandent aucune clé. Pour les ETF du PEA et les indices de référence du PEI, créer une clé gratuite sur twelvedata.com et la saisir dans Réglages › Cours des ETF.
+Les crypto-actifs (CoinGecko) et les ETF et actions (Yahoo Finance, places européennes comprises : `CW8.PA`, `IWDA.AS`…) ne demandent aucune clé. Yahoo Finance est la source proposée par défaut pour le PEA et les indices de référence du PEI.
+
+Twelve Data reste disponible au choix dans la recherche d'actif, avec une clé saisie dans Réglages › Cours des ETF (la vérification affiche l'offre associée). Son offre gratuite ne couvre pas Euronext ni les autres places européennes : la recherche signale « offre Grow requise » et un bandeau nomme les actifs non couverts.
+
+Yahoo Finance est une API non officielle : si son format change, les valeurs restent affichées depuis le cache. Contrôle manuel contre l'API réelle :
+
+```bash
+cargo test -p lc-infrastructure yahoo -- --ignored
+```
 
 ## Développement (PC)
 

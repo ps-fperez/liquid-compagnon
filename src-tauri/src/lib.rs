@@ -95,6 +95,7 @@ pub fn run() {
             commands::accounts::upsert_position,
             commands::accounts::remove_position,
             commands::accounts::search_assets,
+            commands::accounts::price_source_status,
             commands::accounts::create_pei_fund,
             commands::accounts::update_pei_fund,
             commands::accounts::record_pei_nav,

@@ -111,7 +111,7 @@ fn NewFundSheet(open: RwSignal<bool>, account_id: String, on_saved: Callback<()>
                 <Field label="Nom du fonds" value=name placeholder="Amundi Actions Monde" />
                 <Field label="Nombre de parts" value=units input_mode="decimal" />
                 <Field label="Valeur de part du jour" value=nav input_mode="decimal" suffix="€" />
-                <AssetSearch source=QuoteSourceDto::TwelveData selected=reference label="Indice de référence (facultatif)" placeholder="IWDA, CW8…" />
+                <AssetSearch sources=vec![QuoteSourceDto::Yahoo, QuoteSourceDto::TwelveData] selected=reference label="Indice de référence (facultatif)" placeholder="IWDA, CW8…" />
                 <p class="text-xs text-muted">{REFERENCE_HELP}</p>
                 <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
                 <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit>"Ajouter"</button>
@@ -207,7 +207,7 @@ fn FundSheet(
                 <h3 class=format!("{SECTION_TITLE} mt-2")>"Modifier le fonds"</h3>
                 <Field label="Nom du fonds" value=name />
                 <Field label="Nombre de parts" value=units input_mode="decimal" />
-                <AssetSearch source=QuoteSourceDto::TwelveData selected=reference label="Indice de référence" placeholder="IWDA, CW8…" />
+                <AssetSearch sources=vec![QuoteSourceDto::Yahoo, QuoteSourceDto::TwelveData] selected=reference label="Indice de référence" placeholder="IWDA, CW8…" />
                 <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
                 <button class=BTN_SECONDARY disabled=move || busy.get() on:click=update>"Enregistrer les modifications"</button>
                 <button class=BTN_DANGER disabled=move || busy.get() on:click=remove>"Supprimer ce fonds"</button>

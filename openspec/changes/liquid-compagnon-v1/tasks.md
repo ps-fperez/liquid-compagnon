@@ -89,3 +89,9 @@
 - [x] 10.2 Tests hors ligne (mode avion), quota API atteint, clé absente, import invalide
 - [x] 10.3 Vérifier `openspec validate liquid-compagnon-v1`, `cargo clippy -D warnings`, `cargo test --workspace` au vert
 - [x] 10.4 Build APK release signé, installation sur le téléphone, README (build, installation, sauvegarde)
+
+## 11. Correctif post-recette : cours des ETF européens
+
+- [x] 11.1 Twelve Data : symboles hors offre (403 par symbole, 404 seul) signalés `NotCovered` au lieu d'être ignorés, 401 = clé absente ou invalide, offre requise affichée dans la recherche (`show_plan`), vérification de la clé par `/api_usage`.
+- [x] 11.2 Source Yahoo Finance sans clé (`QuoteSource::Yahoo`, `CW8.PA`) : cours, conversion de devises (pence `GBp` compris), recherche ; source par défaut des PEA et références PEI, Twelve Data au choix dans la recherche d'actif.
+- [x] 11.3 Bandeau « non couvert » nommant les actifs, sauvegarde JSON et SQLite étendues à la nouvelle source (format inchangé).

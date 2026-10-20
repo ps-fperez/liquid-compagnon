@@ -191,6 +191,14 @@ await fill("Solde espèces", "500");
 await click("Enregistrer");
 await waitForText("500,00 €");
 await shot("pea");
+// Recherche d'actif : Yahoo Finance proposé par défaut, Twelve Data au choix (sans appel réseau).
+await click("Ajouter une position");
+await waitForText("Yahoo Finance");
+await click("Twelve Data");
+const checked = await evaluate(`document.querySelector('[role="dialog"] [role="radio"][aria-checked="true"]')?.textContent.trim()`);
+if (checked !== "Twelve Data") await fail(`source sélectionnée inattendue : ${checked}`);
+await shot("pea-recherche");
+await click("Fermer");
 await click("Accueil");
 await waitForText("11 140,25 €");
 
@@ -222,7 +230,7 @@ await invoke("upsert_position", {
   unit_cost: "500",
 });
 await click("Accueil");
-await waitForText("Ajoutez une clé Twelve Data");
+await waitForText("Clé Twelve Data absente ou invalide");
 await waitForText("prix de revient"); // valorisé sans cours ni appel réseau
 await waitForText("12 140,25 €"); // 10 640,25 + 500 + 2 × 500
 await shot("cle-absente");

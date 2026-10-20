@@ -204,6 +204,7 @@ pub struct FakeProvider {
     clock: Arc<FixedClock>,
     prices: Mutex<HashMap<String, Decimal>>,
     failure: Mutex<Option<PriceError>>,
+    uncovered: Mutex<Vec<String>>,
     catalog: Vec<AssetRef>,
     pub calls: AtomicUsize,
 }
@@ -215,6 +216,7 @@ impl FakeProvider {
             clock,
             prices: Mutex::default(),
             failure: Mutex::default(),
+            uncovered: Mutex::default(),
             catalog,
             calls: AtomicUsize::new(0),
         }
@@ -229,6 +231,12 @@ impl FakeProvider {
     pub fn fail_with(&self, error: PriceError) {
         *lock(&self.failure) = Some(error);
     }
+
+    /// Simule un actif que la source refuse de coter (offre insuffisante).
+    pub fn refuse(&self, symbol: &str) {
+        let symbol = asset(self.source, symbol).symbol().to_string();
+        lock(&self.uncovered).push(symbol);
+    }
 }
 
 #[async_trait]
@@ -237,13 +245,19 @@ impl PriceProvider for FakeProvider {
         self.source
     }
 
-    async fn quotes(&self, assets: &[AssetRef]) -> Result<Vec<Quote>, PriceError> {
+    async fn quotes(&self, assets: &[AssetRef]) -> Result<QuoteBatch, PriceError> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         if let Some(error) = lock(&self.failure).clone() {
             return Err(error);
         }
         let prices = lock(&self.prices);
-        Ok(assets
+        let refused = lock(&self.uncovered);
+        let uncovered = assets
+            .iter()
+            .filter(|a| refused.contains(&a.symbol().to_string()))
+            .cloned()
+            .collect();
+        let quotes = assets
             .iter()
             .filter_map(|asset| {
                 prices.get(asset.symbol()).map(|price| {
@@ -255,7 +269,8 @@ impl PriceProvider for FakeProvider {
                     )
                 })
             })
-            .collect())
+            .collect();
+        Ok(QuoteBatch { quotes, uncovered })
     }
 
     async fn search(&self, query: &str) -> Result<Vec<AssetRef>, PriceError> {

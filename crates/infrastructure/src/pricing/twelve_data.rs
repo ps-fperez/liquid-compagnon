@@ -3,11 +3,11 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
-use lc_application::ports::{Clock, PriceError, PriceProvider, SettingsStore};
+use lc_application::ports::{Clock, PriceError, PriceProvider, QuoteBatch, SettingsStore};
 use lc_domain::account::{AssetRef, CurrencyCode, QuoteSource};
 use lc_domain::valuation::{Quote, QuoteFreshness};
 use lc_domain::{Decimal, Money};
-use reqwest::{Client, StatusCode};
+use reqwest::Client;
 use serde_json::Value;
 
 use super::{json_decimal, transport_error};
@@ -96,7 +96,7 @@ impl TwelveDataProvider {
         path: &str,
         query: &[(&str, &str)],
         key: Option<&str>,
-    ) -> Result<Value, PriceError> {
+    ) -> Result<Fetch, PriceError> {
         let mut request = self
             .client
             .get(format!("{}{path}", self.base_url))
@@ -105,40 +105,62 @@ impl TwelveDataProvider {
             request = request.header("Authorization", format!("apikey {key}"));
         }
         let response = request.send().await.map_err(transport_error)?;
-        match response.status() {
-            StatusCode::TOO_MANY_REQUESTS => return Err(PriceError::RateLimited),
-            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
-                return Err(PriceError::MissingApiKey);
-            }
-            status if !status.is_success() => {
-                return Err(PriceError::Unavailable(format!("HTTP {status}")));
-            }
-            _ => {}
+        let status = response.status();
+        let body: Option<Value> = response.json().await.ok();
+        let code = body
+            .as_ref()
+            .and_then(api_error_code)
+            .or_else(|| (!status.is_success()).then_some(u64::from(status.as_u16())));
+        match (code, body) {
+            (None, Some(body)) => Ok(Fetch::Found(body)),
+            (None, None) => Err(PriceError::InvalidResponse("corps JSON illisible".into())),
+            (Some(code), _) => match api_error(code) {
+                Some(error) => Err(error),
+                None => Ok(Fetch::NotCovered),
+            },
         }
-        let body: Value = response.json().await.map_err(transport_error)?;
-        match api_error(&body) {
-            Some(error) => Err(error),
-            None => Ok(body),
+    }
+
+    async fn get_found(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        key: Option<&str>,
+    ) -> Result<Value, PriceError> {
+        match self.get_json(path, query, key).await? {
+            Fetch::Found(body) => Ok(body),
+            Fetch::NotCovered => Err(PriceError::InvalidResponse(format!(
+                "{path} non disponible avec cette offre"
+            ))),
         }
     }
 }
 
+enum Fetch {
+    Found(Value),
+    /// Symbole inconnu ou réservé à une offre supérieure (codes 400, 403, 404).
+    NotCovered,
+}
+
 /// Twelve Data signale souvent ses erreurs dans un corps HTTP 200 :
 /// `{"code": 429, "message": "...", "status": "error"}`.
-fn api_error(body: &Value) -> Option<PriceError> {
+fn api_error_code(body: &Value) -> Option<u64> {
     if body["status"].as_str() != Some("error") {
         return None;
     }
-    Some(match body["code"].as_u64() {
-        Some(429) => PriceError::RateLimited,
-        Some(401 | 403) => PriceError::MissingApiKey,
-        _ => PriceError::InvalidResponse(
-            body["message"]
-                .as_str()
-                .unwrap_or("erreur Twelve Data")
-                .to_string(),
-        ),
-    })
+    Some(body["code"].as_u64().unwrap_or(500))
+}
+
+/// Erreur bloquante pour la requête entière, ou `None` si seul le symbole est en cause.
+fn api_error(code: u64) -> Option<PriceError> {
+    match code {
+        429 => Some(PriceError::RateLimited),
+        // 401 : clé absente ou invalide. 403 signifie « réservé à une offre supérieure ».
+        401 => Some(PriceError::MissingApiKey),
+        400 | 403 | 404 => None,
+        code if code >= 500 => Some(PriceError::Unavailable(format!("HTTP {code}"))),
+        code => Some(PriceError::InvalidResponse(format!("code {code}"))),
+    }
 }
 
 /// Entrée d'un symbole dans une réponse groupée (objet indexé par symbole). Le symbole peut être
@@ -162,9 +184,9 @@ impl PriceProvider for TwelveDataProvider {
         QuoteSource::TwelveData
     }
 
-    async fn quotes(&self, assets: &[AssetRef]) -> Result<Vec<Quote>, PriceError> {
+    async fn quotes(&self, assets: &[AssetRef]) -> Result<QuoteBatch, PriceError> {
         if assets.is_empty() {
-            return Ok(Vec::new());
+            return Ok(QuoteBatch::default());
         }
         let key = self.api_key()?.ok_or(PriceError::MissingApiKey)?;
         let (served, currencies) = self.reserve_credits(assets)?;
@@ -175,16 +197,25 @@ impl PriceProvider for TwelveDataProvider {
             .map(AssetRef::symbol)
             .collect::<Vec<_>>()
             .join(",");
-        let body = self
+        let body = match self
             .get_json("/price", &[("symbol", &symbols)], Some(&key))
-            .await?;
+            .await?
+        {
+            Fetch::Found(body) => body,
+            Fetch::NotCovered => {
+                return Ok(QuoteBatch {
+                    quotes: Vec::new(),
+                    uncovered: assets.to_vec(),
+                });
+            }
+        };
 
         let mut to_eur: HashMap<String, Decimal> =
             HashMap::from([("EUR".to_string(), Decimal::ONE)]);
         for currency in currencies {
             let pair = format!("{currency}/EUR");
             let rate_body = self
-                .get_json("/exchange_rate", &[("symbol", &pair)], Some(&key))
+                .get_found("/exchange_rate", &[("symbol", &pair)], Some(&key))
                 .await?;
             let rate = json_decimal(&rate_body["rate"])
                 .ok_or_else(|| PriceError::InvalidResponse(format!("taux {pair} absent")))?;
@@ -192,37 +223,45 @@ impl PriceProvider for TwelveDataProvider {
         }
 
         let now = self.clock.now();
-        Ok(assets
-            .iter()
-            .filter_map(|asset| {
-                let entry = if assets.len() == 1 {
-                    Some(&body)
-                } else {
-                    batch_entry(&body, asset.symbol())
-                }?;
-                if api_error(entry).is_some() {
-                    return None;
-                }
-                let price = json_decimal(&entry["price"])?;
-                let rate = to_eur.get(asset.currency().as_str())?;
-                Some(Quote::new(
+        let mut batch = QuoteBatch::default();
+        for asset in assets {
+            let entry = if assets.len() == 1 {
+                Some(&body)
+            } else {
+                batch_entry(&body, asset.symbol())
+            };
+            if let Some(error) = entry.and_then(api_error_code).and_then(api_error) {
+                return Err(error);
+            }
+            let price = entry
+                .filter(|entry| api_error_code(entry).is_none())
+                .and_then(|entry| json_decimal(&entry["price"]));
+            match (price, to_eur.get(asset.currency().as_str())) {
+                (Some(price), Some(rate)) => batch.quotes.push(Quote::new(
                     asset.clone(),
                     Money::new(price * rate),
                     now,
                     QuoteFreshness::Live,
-                ))
-            })
-            .collect())
+                )),
+                _ => batch.uncovered.push(asset.clone()),
+            }
+        }
+        Ok(batch)
     }
 
     /// Recherche par ticker ou ISIN. Le symbole retenu inclut la place de cotation
-    /// (`CW8:Euronext`) pour lever les ambiguïtés entre marchés.
+    /// (`CW8:Euronext`) pour lever les ambiguïtés entre marchés ; les cotations réservées aux
+    /// offres payantes sont signalées dans le nom affiché.
     async fn search(&self, query: &str) -> Result<Vec<AssetRef>, PriceError> {
         let key = self.api_key()?;
         let body = self
-            .get_json(
+            .get_found(
                 "/symbol_search",
-                &[("symbol", query), ("outputsize", Self::SEARCH_LIMIT)],
+                &[
+                    ("symbol", query),
+                    ("outputsize", Self::SEARCH_LIMIT),
+                    ("show_plan", "true"),
+                ],
                 key.as_deref(),
             )
             .await?;
@@ -236,7 +275,7 @@ impl PriceProvider for TwelveDataProvider {
                 let exchange = item["exchange"].as_str().unwrap_or_default();
                 let name = item["instrument_name"].as_str().unwrap_or(ticker);
                 let currency = CurrencyCode::new(item["currency"].as_str()?).ok()?;
-                let (symbol, display_name) = if exchange.is_empty() {
+                let (symbol, mut display_name) = if exchange.is_empty() {
                     (ticker.to_string(), name.to_string())
                 } else {
                     (
@@ -244,12 +283,34 @@ impl PriceProvider for TwelveDataProvider {
                         format!("{name} · {exchange}"),
                     )
                 };
+                if let Some(plan) = item["access"]["plan"]
+                    .as_str()
+                    .filter(|plan| !plan.eq_ignore_ascii_case("basic"))
+                {
+                    display_name.push_str(&format!(" · offre {plan} requise"));
+                }
                 AssetRef::new(QuoteSource::TwelveData, &symbol, &display_name, currency).ok()
             })
             .collect())
     }
-}
 
+    /// Offre associée à la clé et crédits consommés aujourd'hui (`/api_usage`, gratuit).
+    async fn account_status(&self) -> Result<Option<String>, PriceError> {
+        let key = self.api_key()?.ok_or(PriceError::MissingApiKey)?;
+        let body = self.get_found("/api_usage", &[], Some(&key)).await?;
+        let plan = body["plan_category"]
+            .as_str()
+            .ok_or_else(|| PriceError::InvalidResponse("offre absente".into()))?;
+        let mut status = format!("offre {plan}");
+        if let (Some(used), Some(limit)) = (
+            body["daily_usage"].as_u64(),
+            body["plan_daily_limit"].as_u64(),
+        ) {
+            status.push_str(&format!(", {used}/{limit} crédits aujourd'hui"));
+        }
+        Ok(Some(status))
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -308,7 +369,8 @@ mod tests {
             .provider
             .quotes(&[security("CW8:Euronext", "EUR"), security("IWDA", "EUR")])
             .await
-            .unwrap();
+            .unwrap()
+            .quotes;
 
         assert_eq!(quotes.len(), 2);
         assert_eq!(quotes[0].price(), Money::new(dec!(520.10)));
@@ -328,7 +390,8 @@ mod tests {
             .provider
             .quotes(&[security("CW8:Euronext", "EUR")])
             .await
-            .unwrap();
+            .unwrap()
+            .quotes;
         assert_eq!(single[0].price(), Money::new(dec!(520.10)));
 
         let body = json!({ "CW8": { "price": "1" }, "ESE": { "code": 400, "status": "error", "message": "symbole inconnu" } });
@@ -336,7 +399,10 @@ mod tests {
             batch_entry(&body, "CW8:Euronext"),
             Some(&json!({ "price": "1" }))
         );
-        assert!(api_error(batch_entry(&body, "ESE").unwrap()).is_some());
+        assert_eq!(
+            api_error_code(batch_entry(&body, "ESE").unwrap()),
+            Some(400)
+        );
     }
 
     // Spec market-pricing : « ETF coté en dollars »
@@ -362,7 +428,8 @@ mod tests {
             .provider
             .quotes(&[security("CSPX", "USD")])
             .await
-            .unwrap();
+            .unwrap()
+            .quotes;
 
         assert_eq!(quotes[0].price(), Money::new(dec!(92)));
     }
@@ -408,6 +475,64 @@ mod tests {
         );
     }
 
+    // Cas réel : CW8 sur Euronext exige l'offre Grow ; la clé gratuite reçoit un 403 par symbole
+    // dans une requête groupée, un 404 pour un symbole seul.
+    #[tokio::test]
+    async fn symbols_outside_the_plan_are_reported_as_uncovered() {
+        let server = MockServer::start().await;
+        Mock::given(path("/price"))
+            .and(query_param("symbol", "CW8:Euronext,AAPL"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "CW8": { "code": 403, "status": "error", "message": "**symbol** CW8 is not available with your plan" },
+                "AAPL": { "price": "200" }
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(path("/price"))
+            .and(query_param("symbol", "CW8:Euronext"))
+            .respond_with(ResponseTemplate::new(404).set_body_json(json!({
+                "code": 404, "status": "error", "message": "**symbol** not found"
+            })))
+            .mount(&server)
+            .await;
+        let setup = setup(&server, Some("k"));
+
+        let batch = setup
+            .provider
+            .quotes(&[security("CW8:Euronext", "EUR"), security("AAPL", "EUR")])
+            .await
+            .unwrap();
+        assert_eq!(batch.quotes.len(), 1);
+        assert_eq!(batch.uncovered, vec![security("CW8:Euronext", "EUR")]);
+
+        let single = setup
+            .provider
+            .quotes(&[security("CW8:Euronext", "EUR")])
+            .await
+            .unwrap();
+        assert!(single.quotes.is_empty());
+        assert_eq!(single.uncovered.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn account_status_reports_plan_and_daily_usage() {
+        let server = MockServer::start().await;
+        Mock::given(path("/api_usage"))
+            .and(header("Authorization", "apikey k"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "current_usage": 1, "plan_limit": 8, "daily_usage": 12,
+                "plan_daily_limit": 800, "plan_category": "basic"
+            })))
+            .mount(&server)
+            .await;
+        let setup = setup(&server, Some("k"));
+
+        assert_eq!(
+            setup.provider.account_status().await,
+            Ok(Some("offre basic, 12/800 crédits aujourd'hui".into()))
+        );
+    }
+
     #[tokio::test]
     async fn free_plan_credits_are_respected_per_minute() {
         let server = MockServer::start().await;
@@ -424,17 +549,17 @@ mod tests {
             security("C", "EUR"),
         ];
 
-        assert_eq!(setup.provider.quotes(&three).await.unwrap().len(), 3);
-        assert_eq!(setup.provider.quotes(&three).await.unwrap().len(), 3);
+        assert_eq!(setup.provider.quotes(&three).await.unwrap().quotes.len(), 3);
+        assert_eq!(setup.provider.quotes(&three).await.unwrap().quotes.len(), 3);
         // 6 crédits utilisés sur 8 : seuls les 2 premiers actifs sont demandés.
-        assert_eq!(setup.provider.quotes(&three).await.unwrap().len(), 2);
+        assert_eq!(setup.provider.quotes(&three).await.unwrap().quotes.len(), 2);
         assert_eq!(
             setup.provider.quotes(&three).await,
             Err(PriceError::RateLimited)
         );
 
         setup.clock.advance(Duration::seconds(61));
-        assert_eq!(setup.provider.quotes(&three).await.unwrap().len(), 3);
+        assert_eq!(setup.provider.quotes(&three).await.unwrap().quotes.len(), 3);
     }
 
     #[tokio::test]
@@ -442,9 +567,11 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(path("/symbol_search"))
             .and(query_param("symbol", "CW8"))
+            .and(query_param("show_plan", "true"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
                 "data": [
-                    { "symbol": "CW8", "instrument_name": "Amundi MSCI World UCITS ETF", "exchange": "Euronext", "currency": "EUR" },
+                    { "symbol": "CW8", "instrument_name": "Amundi MSCI World UCITS ETF", "exchange": "Euronext", "currency": "EUR",
+                      "access": { "global": "Grow", "plan": "Grow" } },
                     { "symbol": "CW8", "instrument_name": "Amundi MSCI World", "exchange": "XETR", "currency": "EUR" },
                     { "symbol": "BAD", "instrument_name": "Sans devise", "exchange": "X" }
                 ],
@@ -460,7 +587,8 @@ mod tests {
         assert_eq!(results[0].symbol(), "CW8:Euronext");
         assert_eq!(
             results[0].display_name(),
-            "Amundi MSCI World UCITS ETF · Euronext"
+            "Amundi MSCI World UCITS ETF · Euronext · offre Grow requise"
         );
+        assert_eq!(results[1].display_name(), "Amundi MSCI World · XETR");
     }
 }

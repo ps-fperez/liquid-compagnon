@@ -1,8 +1,8 @@
 //! Réglages : sécurité, clé de cotation, sauvegarde, à propos.
 
 use lc_shared_dto::{
-    ApiKeyInput, AssetSearchInput, ChangePinInput, ErrorDto, ImportInput, PingResponse,
-    QuoteSourceDto, SettingsDto, ToggleInput,
+    ApiKeyInput, ChangePinInput, ErrorDto, ImportInput, PingResponse, QuoteSourceDto, SettingsDto,
+    ToggleInput,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -157,15 +157,13 @@ fn PricingSection(has_key: bool, on_saved: Callback<()>) -> impl IntoView {
             move |()| {
                 key.set(String::new());
                 on_saved.run(());
-                // Vérifie la clé par une recherche (sans transmettre aucune donnée personnelle).
+                // Vérifie la clé et affiche l'offre associée (aucune donnée personnelle transmise).
                 spawn_local(async move {
-                    let check = api::search_assets(AssetSearchInput {
-                        source: QuoteSourceDto::TwelveData,
-                        query: "CW8".into(),
-                    })
-                    .await;
-                    match check {
-                        Ok(_) => info.set(Some("Clé enregistrée et vérifiée".into())),
+                    match api::price_source_status(QuoteSourceDto::TwelveData).await {
+                        Ok(status) => info.set(Some(match status {
+                            Some(status) => format!("Clé vérifiée : {status}"),
+                            None => "Clé enregistrée".into(),
+                        })),
                         Err(failure) => error.set(Some(format!(
                             "Clé enregistrée, mais la vérification a échoué : {}",
                             failure.message
@@ -189,11 +187,14 @@ fn PricingSection(has_key: bool, on_saved: Callback<()>) -> impl IntoView {
 
     view! {
         <section class="flex flex-col gap-2">
-            <h2 class=SECTION_TITLE>"Cours des ETF (Twelve Data)"</h2>
+            <h2 class=SECTION_TITLE>"Cours des ETF"</h2>
             <Card class="flex flex-col gap-3">
                 <p class="text-sm text-muted">
-                    {if has_key { "Une clé est enregistrée." } else { "Aucune clé : les ETF du PEA et les indices du PEI ne sont pas cotés." }}
-                    " Créez une clé gratuite sur twelvedata.com, puis collez-la ici. Elle reste sur ce téléphone et n'est jamais exportée."
+                    "Les ETF et actions sont cotés par Yahoo Finance, sans clé. Twelve Data est une source facultative : son offre gratuite ne couvre pas les places européennes (Paris, Amsterdam…)."
+                </p>
+                <p class="text-sm text-muted">
+                    {if has_key { "Une clé Twelve Data est enregistrée." } else { "Aucune clé Twelve Data." }}
+                    " Elle reste sur ce téléphone et n'est jamais exportée."
                 </p>
                 <Field label="Clé API" value=key input_type="password" placeholder="Votre clé Twelve Data" />
                 <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>

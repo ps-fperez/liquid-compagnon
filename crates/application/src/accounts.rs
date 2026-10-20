@@ -213,6 +213,11 @@ impl AccountUseCases {
         self.pricing.search(source, query).await
     }
 
+    /// État du compte auprès d'une source de cours (offre de la clé, crédits consommés).
+    pub async fn price_source_status(&self, source: QuoteSource) -> AppResult<Option<String>> {
+        self.pricing.source_status(source).await
+    }
+
     /// Ajoute un fonds au PEI avec sa valeur de part du jour ; le cours de son actif de
     /// référence est relevé maintenant et sert d'ancrage aux estimations.
     pub async fn create_pei_fund(

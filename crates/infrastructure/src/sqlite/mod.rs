@@ -164,6 +164,7 @@ pub(crate) fn source_to_sql(source: QuoteSource) -> &'static str {
     match source {
         QuoteSource::CoinGecko => "coingecko",
         QuoteSource::TwelveData => "twelve_data",
+        QuoteSource::Yahoo => "yahoo",
     }
 }
 
@@ -171,6 +172,7 @@ pub(crate) fn source_from_sql(raw: &str) -> StorageResult<QuoteSource> {
     match raw {
         "coingecko" => Ok(QuoteSource::CoinGecko),
         "twelve_data" => Ok(QuoteSource::TwelveData),
+        "yahoo" => Ok(QuoteSource::Yahoo),
         other => Err(corrupt(format!("source de cotation inconnue « {other} »"))),
     }
 }

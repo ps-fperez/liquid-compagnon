@@ -8,7 +8,7 @@ mod sqlite;
 
 pub use backup::JsonBackupCodec;
 pub use clock::SystemClock;
-pub use pricing::{CoinGeckoProvider, TwelveDataProvider, http_client};
+pub use pricing::{CoinGeckoProvider, TwelveDataProvider, YahooFinanceProvider, http_client};
 pub use security::Argon2PinHasher;
 pub use sqlite::{
     Database, SqliteAccountRepository, SqliteBudgetRepository, SqliteDatasetStore,

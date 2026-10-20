@@ -55,6 +55,7 @@ pub fn source_label(source: QuoteSourceDto) -> &'static str {
     match source {
         QuoteSourceDto::CoinGecko => "CoinGecko",
         QuoteSourceDto::TwelveData => "Twelve Data",
+        QuoteSourceDto::Yahoo => "Yahoo Finance",
     }
 }
 
@@ -66,10 +67,19 @@ pub fn pricing_issue_message(issue: &PricingIssueDto) -> String {
             format!("{source} : limite de requêtes atteinte, réessayez plus tard")
         }
         PricingIssueKindDto::MissingApiKey => {
-            "Ajoutez une clé Twelve Data dans les réglages pour suivre les ETF".to_string()
+            "Clé Twelve Data absente ou invalide : vérifiez-la dans les réglages".to_string()
         }
         PricingIssueKindDto::Unavailable => {
             format!("{source} injoignable : dernières valeurs connues affichées")
+        }
+        PricingIssueKindDto::NotCovered => {
+            let symbols = issue.symbols.join(", ");
+            match issue.source {
+                QuoteSourceDto::TwelveData => format!(
+                    "{symbols} : non couvert par votre offre Twelve Data. Choisissez l'actif via Yahoo Finance"
+                ),
+                _ => format!("{symbols} : cours introuvable chez {source}"),
+            }
         }
     }
 }

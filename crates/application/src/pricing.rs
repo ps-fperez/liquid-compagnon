@@ -16,6 +16,11 @@ pub enum PricingIssue {
     RateLimited(QuoteSource),
     MissingApiKey(QuoteSource),
     Unavailable(QuoteSource),
+    /// Actifs que la source ne cote pas (ex. place européenne hors de l'offre gratuite).
+    NotCovered {
+        source: QuoteSource,
+        symbols: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -75,7 +80,7 @@ impl PricingService {
             }
         }
 
-        for source in [QuoteSource::CoinGecko, QuoteSource::TwelveData] {
+        for source in QuoteSource::ALL {
             let batch: Vec<AssetRef> = to_fetch
                 .iter()
                 .filter(|a| a.source() == source)
@@ -86,8 +91,18 @@ impl PricingService {
             }
             match self.provider(source) {
                 Some(provider) => match provider.quotes(&batch).await {
-                    Ok(quotes) => {
-                        for quote in quotes {
+                    Ok(result) => {
+                        if !result.uncovered.is_empty() {
+                            refresh.issues.push(PricingIssue::NotCovered {
+                                source,
+                                symbols: result
+                                    .uncovered
+                                    .iter()
+                                    .map(|a| a.symbol().to_string())
+                                    .collect(),
+                            });
+                        }
+                        for quote in result.quotes {
                             self.cache.put(&quote)?;
                             refresh
                                 .prices
@@ -119,6 +134,12 @@ impl PricingService {
         }
         let provider = self.provider(source).ok_or(AppError::NoPriceProvider)?;
         Ok(provider.search(query).await?)
+    }
+
+    /// État du compte auprès d'une source (ex. offre de la clé Twelve Data).
+    pub async fn source_status(&self, source: QuoteSource) -> AppResult<Option<String>> {
+        let provider = self.provider(source).ok_or(AppError::NoPriceProvider)?;
+        Ok(provider.account_status().await?)
     }
 
     fn provider(&self, source: QuoteSource) -> Option<&Arc<dyn PriceProvider>> {
@@ -306,6 +327,29 @@ mod tests {
         assert_eq!(
             refresh.issues,
             vec![PricingIssue::Unavailable(QuoteSource::TwelveData)]
+        );
+    }
+
+    #[test]
+    fn uncovered_assets_are_reported() {
+        let env = TestEnv::new();
+        env.twelve_data.set_price("AAPL", dec!(340));
+        env.twelve_data.refuse("CW8:Euronext");
+        let assets = [
+            asset(QuoteSource::TwelveData, "AAPL"),
+            asset(QuoteSource::TwelveData, "CW8:Euronext"),
+        ];
+
+        let refresh = block_on(env.pricing().prices_for(&assets, false)).unwrap();
+
+        assert!(refresh.prices.get(&assets[0]).is_some());
+        assert!(refresh.prices.get(&assets[1]).is_none());
+        assert_eq!(
+            refresh.issues,
+            vec![PricingIssue::NotCovered {
+                source: QuoteSource::TwelveData,
+                symbols: vec!["CW8:Euronext".into()]
+            }]
         );
     }
 

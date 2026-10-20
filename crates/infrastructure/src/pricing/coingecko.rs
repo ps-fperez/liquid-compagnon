@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use lc_application::ports::{Clock, PriceError, PriceProvider};
+use lc_application::ports::{Clock, PriceError, PriceProvider, QuoteBatch};
 use lc_domain::Money;
 use lc_domain::account::{AssetRef, CurrencyCode, QuoteSource};
 use lc_domain::valuation::{Quote, QuoteFreshness};
@@ -58,9 +58,10 @@ impl PriceProvider for CoinGeckoProvider {
     }
 
     /// Tous les actifs en une requête : `/simple/price?ids=bitcoin,ethereum&vs_currencies=eur`.
-    async fn quotes(&self, assets: &[AssetRef]) -> Result<Vec<Quote>, PriceError> {
+    /// Un identifiant inconnu est simplement absent de la réponse : il est signalé non couvert.
+    async fn quotes(&self, assets: &[AssetRef]) -> Result<QuoteBatch, PriceError> {
         if assets.is_empty() {
-            return Ok(Vec::new());
+            return Ok(QuoteBatch::default());
         }
         let ids = assets
             .iter()
@@ -71,14 +72,19 @@ impl PriceProvider for CoinGeckoProvider {
             .get_json("/simple/price", &[("ids", &ids), ("vs_currencies", "eur")])
             .await?;
         let now = self.clock.now();
-        Ok(assets
-            .iter()
-            .filter_map(|asset| {
-                json_decimal(&body[asset.symbol()]["eur"]).map(|price| {
-                    Quote::new(asset.clone(), Money::new(price), now, QuoteFreshness::Live)
-                })
-            })
-            .collect())
+        let mut batch = QuoteBatch::default();
+        for asset in assets {
+            match json_decimal(&body[asset.symbol()]["eur"]) {
+                Some(price) => batch.quotes.push(Quote::new(
+                    asset.clone(),
+                    Money::new(price),
+                    now,
+                    QuoteFreshness::Live,
+                )),
+                None => batch.uncovered.push(asset.clone()),
+            }
+        }
+        Ok(batch)
     }
 
     async fn search(&self, query: &str) -> Result<Vec<AssetRef>, PriceError> {
@@ -143,15 +149,21 @@ mod tests {
             .mount(&server)
             .await;
 
-        let quotes = provider(&server)
+        let batch = provider(&server)
             .quotes(&[crypto("bitcoin"), crypto("ethereum"), crypto("solana")])
             .await
             .unwrap();
 
-        assert_eq!(quotes.len(), 2, "solana est inconnu de la réponse");
+        let quotes = &batch.quotes;
+        assert_eq!(quotes.len(), 2);
         assert_eq!(quotes[0].price(), Money::new(dec!(60000.12)));
         assert_eq!(quotes[1].asset().symbol(), "ethereum");
         assert_eq!(quotes[1].freshness(), QuoteFreshness::Live);
+        assert_eq!(
+            batch.uncovered,
+            vec![crypto("solana")],
+            "absent de la réponse"
+        );
     }
 
     // Spec market-pricing : « Limite atteinte »
@@ -181,7 +193,10 @@ mod tests {
     #[tokio::test]
     async fn no_request_without_assets() {
         let server = MockServer::start().await;
-        assert_eq!(provider(&server).quotes(&[]).await, Ok(vec![]));
+        assert_eq!(
+            provider(&server).quotes(&[]).await,
+            Ok(QuoteBatch::default())
+        );
         assert!(server.received_requests().await.unwrap().is_empty());
     }
 

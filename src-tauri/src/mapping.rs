@@ -64,6 +64,7 @@ pub fn quote_source(dto: QuoteSourceDto) -> QuoteSource {
     match dto {
         QuoteSourceDto::CoinGecko => QuoteSource::CoinGecko,
         QuoteSourceDto::TwelveData => QuoteSource::TwelveData,
+        QuoteSourceDto::Yahoo => QuoteSource::Yahoo,
     }
 }
 
@@ -98,12 +99,17 @@ pub fn account_type_dto(account_type: AccountType) -> AccountTypeDto {
     }
 }
 
+pub fn quote_source_dto(source: QuoteSource) -> QuoteSourceDto {
+    match source {
+        QuoteSource::CoinGecko => QuoteSourceDto::CoinGecko,
+        QuoteSource::TwelveData => QuoteSourceDto::TwelveData,
+        QuoteSource::Yahoo => QuoteSourceDto::Yahoo,
+    }
+}
+
 pub fn asset_dto(asset: &AssetRef) -> AssetDto {
     AssetDto {
-        source: match asset.source() {
-            QuoteSource::CoinGecko => QuoteSourceDto::CoinGecko,
-            QuoteSource::TwelveData => QuoteSourceDto::TwelveData,
-        },
+        source: quote_source_dto(asset.source()),
         symbol: asset.symbol().to_string(),
         display_name: asset.display_name().to_string(),
         currency: asset.currency().to_string(),
@@ -125,17 +131,24 @@ pub fn pricing_issues_dto(issues: &[PricingIssue]) -> Vec<PricingIssueDto> {
     issues
         .iter()
         .map(|issue| {
-            let (source, kind) = match issue {
-                PricingIssue::RateLimited(source) => (source, PricingIssueKindDto::RateLimited),
-                PricingIssue::MissingApiKey(source) => (source, PricingIssueKindDto::MissingApiKey),
-                PricingIssue::Unavailable(source) => (source, PricingIssueKindDto::Unavailable),
+            let (source, kind, symbols) = match issue {
+                PricingIssue::RateLimited(source) => {
+                    (source, PricingIssueKindDto::RateLimited, Vec::new())
+                }
+                PricingIssue::MissingApiKey(source) => {
+                    (source, PricingIssueKindDto::MissingApiKey, Vec::new())
+                }
+                PricingIssue::Unavailable(source) => {
+                    (source, PricingIssueKindDto::Unavailable, Vec::new())
+                }
+                PricingIssue::NotCovered { source, symbols } => {
+                    (source, PricingIssueKindDto::NotCovered, symbols.clone())
+                }
             };
             PricingIssueDto {
-                source: match source {
-                    QuoteSource::CoinGecko => QuoteSourceDto::CoinGecko,
-                    QuoteSource::TwelveData => QuoteSourceDto::TwelveData,
-                },
+                source: quote_source_dto(*source),
                 kind,
+                symbols,
             }
         })
         .collect()

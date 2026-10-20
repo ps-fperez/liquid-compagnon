@@ -52,7 +52,7 @@ liquid-compagnon/
   - `Securities { product: PEA | Crypto, cash: Money, positions: Vec<Position> }`
   - `EmployeeSavings { funds: Vec<PeiFund> }` (PEI)
 - `Position { asset: AssetRef, quantity: Decimal, unit_cost: Option<Money> }`
-- `AssetRef { provider: CoinGecko | TwelveData, symbol, display_name, currency }`
+- `AssetRef { provider: CoinGecko | TwelveData | Yahoo, symbol, display_name, currency }`
 - `PeiFund { name, units, reference: Option<AssetRef>, anchor: NavAnchor { nav: Money, date, reference_price: Option<Money> } }`
 - `SalaryEntry { effective_month, net_amount }`, `OneOffIncome`, `RecurringCharge { periodicity, start, end }`, `Expense`, `Category`.
 - `Snapshot { month, kind: Auto | Manual, account_values: Vec<(AccountId, Money)>, total }`.
@@ -68,7 +68,7 @@ pub trait AccountRepository   { fn list(&self); fn get(&self, id); fn save(&self
 pub trait BudgetRepository    { /* catégories, salaires, revenus ponctuels, charges, dépenses : liste, save, delete */ }
 pub trait SnapshotRepository  { fn list(&self); fn save(&self, snapshot); }
 pub trait PriceCache          { fn get(&self, a: &AssetRef) -> Option<Quote>; fn put(&self, q: &Quote); }
-#[async_trait] pub trait PriceProvider { fn source(&self) -> QuoteSource; async fn quotes(&self, a: &[AssetRef]) -> Result<Vec<Quote>, PriceError>; async fn search(&self, q: &str) -> Result<Vec<AssetRef>, PriceError>; }
+#[async_trait] pub trait PriceProvider { fn source(&self) -> QuoteSource; async fn quotes(&self, a: &[AssetRef]) -> Result<QuoteBatch /* quotes + uncovered */, PriceError>; async fn search(&self, q: &str) -> Result<Vec<AssetRef>, PriceError>; async fn account_status(&self) -> Result<Option<String>, PriceError>; }
 pub trait PinHasher           { fn hash(&self, pin); fn verify(&self, pin, hash) -> bool; }   // Argon2id
 pub trait SettingsStore       { /* hash du PIN, compteur d'échecs, biométrie, clé Twelve Data, date du dernier export */ }
 pub trait BackupCodec         { fn encode(&self, data: &FullDataset); fn decode(&self, bytes) -> Result<FullDataset, BackupError>; }
@@ -96,7 +96,8 @@ Tables : `accounts`, `savings_details`, `positions`, `pei_funds`, `pei_nav_ancho
 
 ### D7 — Valorisation et cours
 - **CoinGecko** : `GET /api/v3/simple/price?ids=…&vs_currencies=eur` (tous les actifs en une requête) et `/search` pour la recherche. Clé « demo » optionnelle si l'API publique devient restrictive.
-- **Twelve Data** : `/price` (batch via `symbol=A,B`), `/symbol_search`, `/exchange_rate` pour la conversion en EUR. Symboles au format `TICKER:PLACE` (ex. `CW8:Euronext`) issus de `/symbol_search`. Offre gratuite : 8 crédits/min (1 par symbole et par conversion de devise), 800/jour → requête groupée + TTL 5 min + compteur local de crédits : seuls les actifs que le quota permet sont demandés, les autres restent servis par le cache (pas d'erreur 429 provoquée).
+- **Twelve Data** : `/price` (batch via `symbol=A,B`), `/symbol_search`, `/exchange_rate` pour la conversion en EUR. Symboles au format `TICKER:PLACE` (ex. `CW8:Euronext`) issus de `/symbol_search`. Offre gratuite : 8 crédits/min (1 par symbole et par conversion de devise), 800/jour → requête groupée + TTL 5 min + compteur local de crédits : seuls les actifs que le quota permet sont demandés, les autres restent servis par le cache (pas d'erreur 429 provoquée). L'offre gratuite ne couvre pas les places européennes (Euronext exige l'offre Grow) : un symbole refusé (code 403 par symbole dans une réponse groupée, 404 pour un symbole seul) est renvoyé dans `QuoteBatch::uncovered` ; 401 signifie clé absente ou invalide. `/symbol_search?show_plan=true` indique l'offre requise ; `/api_usage` (gratuit) sert à vérifier la clé.
+- **Yahoo Finance** (ajouté après la recette, API non officielle sans clé) : `/v8/finance/chart/{SYMBOLE}?range=1d&interval=1d` (`meta.regularMarketPrice`, `meta.currency`), une requête par actif (l'API groupée exige une authentification), conversion via les paires `{DEVISE}EUR=X` mémorisées pour la requête, cotations `GBp` divisées par 100 ; `/v1/finance/search` filtré sur ETF, actions, fonds et indices. Source par défaut des PEA et des références PEI, Twelve Data restant au choix. Un changement de format se traduit par « réponse inattendue » et les valeurs restent servies par le cache ; un test réseau `#[ignore]` permet de le détecter.
 - Client HTTP : `reqwest` 0.12 avec `rustls-tls` (fournisseur `ring`, certificats racine `webpki-roots` embarqués) côté `infrastructure`. `reqwest` 0.13 a été écarté : son TLS par défaut impose `aws-lc` (C) et un vérificateur de plateforme qui exige une initialisation JNI sur Android. L'UI WASM ne fait **aucun** appel réseau.
 - **PEI** : `PeiEstimator::estimate(anchor, current_ref_price) = anchor.nav × current / anchor.reference_price`. À chaque `RecordPeiNav`, le cours de référence du jour est capturé et devient le nouvel ancrage.
 

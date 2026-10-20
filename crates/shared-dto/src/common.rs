@@ -37,6 +37,7 @@ impl AccountTypeDto {
 pub enum QuoteSourceDto {
     CoinGecko,
     TwelveData,
+    Yahoo,
 }
 
 /// Actif coté (crypto, ETF, action).
@@ -66,13 +67,18 @@ pub enum PricingIssueKindDto {
     RateLimited,
     MissingApiKey,
     Unavailable,
+    /// Actifs que la source ne cote pas (symbole inconnu, offre insuffisante).
+    NotCovered,
 }
 
 /// Problème de cotation à signaler discrètement (les valeurs restent affichées).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PricingIssueDto {
     pub source: QuoteSourceDto,
     pub kind: PricingIssueKindDto,
+    /// Symboles concernés (`NotCovered`).
+    #[serde(default)]
+    pub symbols: Vec<String>,
 }
 
 /// Variation depuis le dernier snapshot automatique.

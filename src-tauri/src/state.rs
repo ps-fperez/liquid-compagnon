@@ -14,7 +14,7 @@ use lc_application::security::SecurityUseCases;
 use lc_infrastructure::{
     Argon2PinHasher, CoinGeckoProvider, Database, JsonBackupCodec, SqliteAccountRepository,
     SqliteBudgetRepository, SqliteDatasetStore, SqlitePriceCache, SqliteSettingsStore,
-    SqliteSnapshotRepository, SystemClock, TwelveDataProvider, http_client,
+    SqliteSnapshotRepository, SystemClock, TwelveDataProvider, YahooFinanceProvider, http_client,
 };
 
 use crate::session::Session;
@@ -48,10 +48,11 @@ impl Services {
         let providers: Vec<Arc<dyn PriceProvider>> = vec![
             Arc::new(CoinGeckoProvider::new(http.clone(), clock.clone())),
             Arc::new(TwelveDataProvider::new(
-                http,
+                http.clone(),
                 settings.clone(),
                 clock.clone(),
             )),
+            Arc::new(YahooFinanceProvider::new(http, clock.clone())),
         ];
         let pricing = Arc::new(PricingService::new(
             providers,

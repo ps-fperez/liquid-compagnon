@@ -5,15 +5,18 @@ use leptos::task::spawn_local;
 use crate::api;
 use crate::components::style::{BTN_SECONDARY, INPUT, LABEL};
 use crate::icons::{Icon, IconName};
+use crate::util::source_label;
 
-/// Recherche d'un actif coté (« CW8 », « bitcoin »…) auprès de la source du compte.
+/// Recherche d'un actif coté (« CW8 », « bitcoin »…). Avec plusieurs sources, la première est
+/// proposée par défaut et un sélecteur permet d'en changer.
 #[component]
 pub fn AssetSearch(
-    source: QuoteSourceDto,
+    sources: Vec<QuoteSourceDto>,
     selected: RwSignal<Option<AssetDto>>,
     #[prop(into)] label: String,
     #[prop(into)] placeholder: String,
 ) -> impl IntoView {
+    let source = RwSignal::new(sources[0]);
     let query = RwSignal::new(String::new());
     let results = RwSignal::new(Vec::<AssetDto>::new());
     let searching = RwSignal::new(false);
@@ -26,6 +29,7 @@ pub fn AssetSearch(
         }
         searching.set(true);
         message.set(None);
+        let source = source.get_untracked();
         spawn_local(async move {
             match api::search_assets(AssetSearchInput {
                 source,
@@ -57,6 +61,24 @@ pub fn AssetSearch(
                 </div>
             })}
             <Show when=move || selected.with(Option::is_none)>
+                {(sources.len() > 1).then(|| view! {
+                    <div class="flex gap-2" role="radiogroup" aria-label="Source des cours">
+                        {sources.iter().map(|&option| view! {
+                            <button
+                                class=move || format!("rounded-full border px-3 py-1 text-xs {}", if source.get() == option { "border-primary bg-primary/15 text-primary-soft" } else { "border-line text-muted" })
+                                role="radio"
+                                aria-checked=move || (source.get() == option).to_string()
+                                on:click=move |_| {
+                                    source.set(option);
+                                    results.set(Vec::new());
+                                    message.set(None);
+                                }
+                            >
+                                {source_label(option)}
+                            </button>
+                        }).collect_view()}
+                    </div>
+                })}
                 <div class="flex gap-2">
                     <input
                         class=INPUT

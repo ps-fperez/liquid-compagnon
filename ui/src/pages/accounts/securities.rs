@@ -20,11 +20,13 @@ pub fn SecuritiesDetails(
     positions: Vec<PositionDto>,
     on_saved: Callback<()>,
 ) -> impl IntoView {
-    let source = if account_type == AccountTypeDto::Crypto {
-        QuoteSourceDto::CoinGecko
+    // ETF : Yahoo Finance par défaut (gratuit, places européennes), Twelve Data en repli.
+    let sources = if account_type == AccountTypeDto::Crypto {
+        vec![QuoteSourceDto::CoinGecko]
     } else {
-        QuoteSourceDto::TwelveData
+        vec![QuoteSourceDto::Yahoo, QuoteSourceDto::TwelveData]
     };
+    let sources = StoredValue::new(sources);
     let account_id = StoredValue::new(account_id);
     let cash_open = RwSignal::new(false);
     let new_open = RwSignal::new(false);
@@ -78,14 +80,14 @@ pub fn SecuritiesDetails(
 
         <CashSheet open=cash_open account_id=account_id.get_value() cash=cash on_saved=on_saved />
         <BottomSheet open=new_open title="Nouvelle position">
-            <PositionForm account_id=account_id.get_value() source=source existing=None open=new_open on_saved=on_saved />
+            <PositionForm account_id=account_id.get_value() sources=sources.get_value() existing=None open=new_open on_saved=on_saved />
         </BottomSheet>
         {move || editing.get().map(|position| {
             let open = RwSignal::new(true);
             Effect::new(move |_| if !open.get() { editing.set(None) });
             view! {
                 <BottomSheet open=open title="Position">
-                    <PositionForm account_id=account_id.get_value() source=source existing=Some(position.clone()) open=open on_saved=on_saved />
+                    <PositionForm account_id=account_id.get_value() sources=sources.get_value() existing=Some(position.clone()) open=open on_saved=on_saved />
                 </BottomSheet>
             }
         })}
@@ -96,7 +98,7 @@ pub fn SecuritiesDetails(
 #[component]
 fn PositionForm(
     account_id: String,
-    source: QuoteSourceDto,
+    sources: Vec<QuoteSourceDto>,
     existing: Option<PositionDto>,
     open: RwSignal<bool>,
     on_saved: Callback<()>,
@@ -164,10 +166,10 @@ fn PositionForm(
         });
     };
 
-    let placeholder = if source == QuoteSourceDto::CoinGecko {
+    let placeholder = if sources.contains(&QuoteSourceDto::CoinGecko) {
         "bitcoin, ethereum…"
     } else {
-        "CW8, IWDA, FR0010315770…"
+        "CW8, IWDA, Amundi MSCI World…"
     };
     view! {
         <div class="flex flex-col gap-4">
@@ -178,7 +180,7 @@ fn PositionForm(
                     })}
                 }.into_any()
             } else {
-                view! { <AssetSearch source=source selected=asset label="Actif" placeholder=placeholder /> }.into_any()
+                view! { <AssetSearch sources=sources selected=asset label="Actif" placeholder=placeholder /> }.into_any()
             }}
             <Field label="Quantité détenue" value=quantity input_mode="decimal" placeholder="0,15" />
             <Field label="Prix de revient unitaire (facultatif)" value=unit_cost input_mode="decimal" suffix="€" />

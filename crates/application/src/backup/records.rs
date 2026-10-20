@@ -102,6 +102,7 @@ pub struct ScenarioRatesRecord {
 pub enum QuoteSourceRecord {
     CoinGecko,
     TwelveData,
+    Yahoo,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -350,6 +351,7 @@ fn asset_record(asset: &AssetRef) -> AssetRecord {
         source: match asset.source() {
             QuoteSource::CoinGecko => QuoteSourceRecord::CoinGecko,
             QuoteSource::TwelveData => QuoteSourceRecord::TwelveData,
+            QuoteSource::Yahoo => QuoteSourceRecord::Yahoo,
         },
         symbol: asset.symbol().to_string(),
         display_name: asset.display_name().to_string(),
@@ -585,6 +587,7 @@ fn asset_from_record(r: AssetRecord) -> Result<AssetRef, DomainError> {
     let source = match r.source {
         QuoteSourceRecord::CoinGecko => QuoteSource::CoinGecko,
         QuoteSourceRecord::TwelveData => QuoteSource::TwelveData,
+        QuoteSourceRecord::Yahoo => QuoteSource::Yahoo,
     };
     AssetRef::new(
         source,

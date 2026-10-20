@@ -9,6 +9,16 @@ pub enum QuoteSource {
     CoinGecko,
     /// ETF, actions, indices (symboles Twelve Data en majuscules : `CW8`, `IWDA`…).
     TwelveData,
+    /// ETF et actions européennes sans clé (symboles Yahoo Finance : `CW8.PA`, `IWDA.AS`…).
+    Yahoo,
+}
+
+impl QuoteSource {
+    pub const ALL: [QuoteSource; 3] = [
+        QuoteSource::CoinGecko,
+        QuoteSource::TwelveData,
+        QuoteSource::Yahoo,
+    ];
 }
 
 /// Code devise ISO 4217 (3 lettres majuscules).
@@ -73,6 +83,8 @@ impl AssetRef {
                 }
                 None => symbol.to_ascii_uppercase(),
             },
+            // `TICKER.PLACE` (ex. `CW8.PA` pour Paris) : symbole Yahoo en majuscules.
+            QuoteSource::Yahoo => symbol.to_ascii_uppercase(),
         };
         let display_name = match display_name.trim() {
             "" => symbol.clone(),
@@ -139,6 +151,18 @@ mod tests {
         )
         .unwrap();
         assert_eq!(cw8.symbol(), "CW8:Euronext");
+    }
+
+    #[test]
+    fn yahoo_symbols_are_uppercased_with_their_suffix() {
+        let cw8 = AssetRef::new(QuoteSource::Yahoo, " cw8.pa ", "", CurrencyCode::eur()).unwrap();
+        let twelve =
+            AssetRef::new(QuoteSource::TwelveData, "CW8.PA", "", CurrencyCode::eur()).unwrap();
+        assert_eq!(cw8.symbol(), "CW8.PA");
+        assert!(
+            !cw8.is_same_asset(&twelve),
+            "même symbole, sources différentes"
+        );
     }
 
     #[test]

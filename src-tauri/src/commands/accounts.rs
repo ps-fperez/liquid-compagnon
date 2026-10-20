@@ -206,6 +206,20 @@ pub async fn search_assets(
     Ok(results.iter().map(mapping::asset_dto).collect())
 }
 
+/// Vérifie la clé d'une source et décrit l'offre associée (`None` pour une source sans compte).
+#[tauri::command]
+pub async fn price_source_status(
+    state: AppState<'_>,
+    input: QuoteSourceDto,
+) -> CommandResult<Option<String>> {
+    let services = unlocked(&state)?;
+    services
+        .accounts
+        .price_source_status(mapping::quote_source(input))
+        .await
+        .map_err(app_error)
+}
+
 #[tauri::command]
 pub async fn create_pei_fund(state: AppState<'_>, input: NewFundInput) -> CommandResult<String> {
     let services = unlocked(&state)?;

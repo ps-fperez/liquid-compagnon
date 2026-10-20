@@ -2,6 +2,7 @@
 
 mod coingecko;
 mod twelve_data;
+mod yahoo;
 
 use std::str::FromStr;
 use std::time::Duration;
@@ -12,6 +13,7 @@ use serde_json::Value;
 
 pub use coingecko::CoinGeckoProvider;
 pub use twelve_data::TwelveDataProvider;
+pub use yahoo::YahooFinanceProvider;
 
 /// Client HTTP partagé : délai de 10 s, TLS rustls avec certificats racine embarqués.
 pub fn http_client() -> Result<reqwest::Client, String> {

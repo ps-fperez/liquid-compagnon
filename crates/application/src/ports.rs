@@ -79,15 +79,27 @@ pub enum PriceError {
     InvalidResponse(String),
 }
 
-/// Source de cotation (CoinGecko, Twelve Data…). Une requête ne transmet que des identifiants
-/// d'actifs, jamais de montant ni de quantité.
+/// Résultat d'une demande de cours : les cours obtenus et les actifs que la source ne couvre pas
+/// (offre insuffisante, symbole inconnu), à signaler plutôt qu'à ignorer.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct QuoteBatch {
+    pub quotes: Vec<Quote>,
+    pub uncovered: Vec<AssetRef>,
+}
+
+/// Source de cotation (CoinGecko, Twelve Data, Yahoo Finance). Une requête ne transmet que des
+/// identifiants d'actifs, jamais de montant ni de quantité.
 #[async_trait]
 pub trait PriceProvider: Send + Sync {
     fn source(&self) -> QuoteSource;
-    /// Cours en euros des actifs demandés, en une requête groupée si possible. Les actifs
-    /// inconnus de la source sont simplement absents du résultat.
-    async fn quotes(&self, assets: &[AssetRef]) -> Result<Vec<Quote>, PriceError>;
+    /// Cours en euros des actifs demandés, en une requête groupée si possible. Les actifs que la
+    /// source ne peut pas coter sont listés dans `uncovered`.
+    async fn quotes(&self, assets: &[AssetRef]) -> Result<QuoteBatch, PriceError>;
     async fn search(&self, query: &str) -> Result<Vec<AssetRef>, PriceError>;
+    /// État du compte auprès de la source (ex. offre associée à la clé), si elle en a un.
+    async fn account_status(&self) -> Result<Option<String>, PriceError> {
+        Ok(None)
+    }
 }
 
 /// Hachage du code PIN (Argon2id dans l'infrastructure).
