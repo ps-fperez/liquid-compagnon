@@ -9,6 +9,7 @@ mod icons;
 mod pages;
 mod shell;
 mod state;
+mod util;
 
 fn main() {
     console_error_panic_hook::set_once();

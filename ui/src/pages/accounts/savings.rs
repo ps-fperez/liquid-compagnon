@@ -1,0 +1,136 @@
+use lc_shared_dto::{Decimal, NaiveDate, SavingsBalanceInput, SavingsTermsInput};
+use leptos::prelude::*;
+
+use crate::api;
+use crate::components::style::{BTN_PRIMARY, BTN_SECONDARY};
+use crate::components::{Amount, BottomSheet, Card, Field};
+use crate::format;
+use crate::util::run_action;
+
+/// Fiche d'un Livret A / LDDS : solde, taux, plafond.
+#[component]
+pub fn SavingsDetails(
+    account_id: String,
+    balance: Decimal,
+    rate_percent: Decimal,
+    deposit_ceiling: Decimal,
+    balance_updated_on: NaiveDate,
+    ceiling_reached: bool,
+    on_saved: Callback<()>,
+) -> impl IntoView {
+    let balance_open = RwSignal::new(false);
+    let terms_open = RwSignal::new(false);
+    view! {
+        <Card class="flex flex-col gap-3">
+            <div class="flex items-center justify-between">
+                <span class="text-sm text-muted">"Solde"</span>
+                <span class="flex flex-col items-end">
+                    <Amount value=balance class="font-medium" />
+                    <span class="text-xs text-muted">"mis à jour le " {format::date(balance_updated_on)}</span>
+                </span>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="text-sm text-muted">"Taux annuel"</span>
+                <span class="tabular-nums">{format::percent(rate_percent, 2)}</span>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="text-sm text-muted">"Plafond de versement"</span>
+                <Amount value=deposit_ceiling />
+            </div>
+            {ceiling_reached.then(|| view! {
+                <p class="rounded-xl bg-secondary/10 px-3 py-2 text-sm text-secondary-light">
+                    "Plafond atteint : plus aucun versement possible (les intérêts restent acquis)."
+                </p>
+            })}
+        </Card>
+        <div class="flex flex-col gap-2">
+            <button class=BTN_PRIMARY on:click=move |_| balance_open.set(true)>"Mettre à jour le solde"</button>
+            <button class=BTN_SECONDARY on:click=move |_| terms_open.set(true)>"Taux et plafond"</button>
+        </div>
+        <BalanceSheet open=balance_open account_id=account_id.clone() current=balance on_saved=on_saved />
+        <TermsSheet open=terms_open account_id=account_id rate_percent=rate_percent deposit_ceiling=deposit_ceiling on_saved=on_saved />
+    }
+}
+
+#[component]
+fn BalanceSheet(
+    open: RwSignal<bool>,
+    account_id: String,
+    current: Decimal,
+    on_saved: Callback<()>,
+) -> impl IntoView {
+    let amount = RwSignal::new(format::quantity(current));
+    let error = RwSignal::new(None::<String>);
+    let busy = RwSignal::new(false);
+    let account_id = StoredValue::new(account_id);
+    let submit = move |_| {
+        let balance = match format::parse_amount(&amount.get_untracked()) {
+            Ok(balance) => balance,
+            Err(message) => return error.set(Some(message)),
+        };
+        let input = SavingsBalanceInput {
+            account_id: account_id.get_value(),
+            balance,
+        };
+        run_action(busy, error, api::update_savings_balance(input), move |()| {
+            open.set(false);
+            on_saved.run(());
+        });
+    };
+    view! {
+        <BottomSheet open=open title="Mettre à jour le solde">
+            <div class="flex flex-col gap-4">
+                <Field label="Nouveau solde" value=amount input_mode="decimal" suffix="€" />
+                <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
+                <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit>"Enregistrer"</button>
+            </div>
+        </BottomSheet>
+    }
+}
+
+#[component]
+fn TermsSheet(
+    open: RwSignal<bool>,
+    account_id: String,
+    rate_percent: Decimal,
+    deposit_ceiling: Decimal,
+    on_saved: Callback<()>,
+) -> impl IntoView {
+    let rate = RwSignal::new(format::quantity(rate_percent));
+    let ceiling = RwSignal::new(format::quantity(deposit_ceiling));
+    let error = RwSignal::new(None::<String>);
+    let busy = RwSignal::new(false);
+    let account_id = StoredValue::new(account_id);
+    let submit = move |_| {
+        let rate_percent = match format::parse_decimal(&rate.get_untracked()) {
+            Ok(rate) => rate,
+            Err(message) => return error.set(Some(message)),
+        };
+        let deposit_ceiling = match format::parse_amount(&ceiling.get_untracked()) {
+            Ok(ceiling) => ceiling,
+            Err(message) => return error.set(Some(message)),
+        };
+        let input = SavingsTermsInput {
+            account_id: account_id.get_value(),
+            rate_percent,
+            deposit_ceiling,
+        };
+        run_action(busy, error, api::set_savings_terms(input), move |()| {
+            open.set(false);
+            on_saved.run(());
+        });
+    };
+    view! {
+        <BottomSheet open=open title="Taux et plafond">
+            <div class="flex flex-col gap-4">
+                <Field label="Taux annuel" value=rate input_mode="decimal" suffix="%" />
+                <Field label="Plafond de versement" value=ceiling input_mode="decimal" suffix="€" />
+                <p class="text-xs text-muted">
+                    "Si vos rendements de projection suivent le taux du livret, ils sont mis à jour aussi."
+                </p>
+                <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
+                <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit>"Enregistrer"</button>
+            </div>
+        </BottomSheet>
+    }
+}

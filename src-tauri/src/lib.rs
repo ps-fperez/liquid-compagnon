@@ -37,7 +37,13 @@ pub fn run() {
                         .build(),
                 )?;
             }
-            let data_dir = app.path().app_data_dir()?;
+            // En développement, `LC_DATA_DIR` isole la base (tests de l'interface sur un dossier
+            // temporaire) ; ignoré dans les builds de release.
+            let data_dir = match std::env::var_os("LC_DATA_DIR").filter(|_| cfg!(debug_assertions))
+            {
+                Some(dir) => std::path::PathBuf::from(dir),
+                None => app.path().app_data_dir()?,
+            };
             let services = Services::compose(&data_dir)?;
             app.manage(Arc::new(services));
             Ok(())

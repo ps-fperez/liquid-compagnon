@@ -41,6 +41,12 @@ Smoke test de l'application complète, **obligatoire avant tout push qui produit
 powershell -File scripts/smoke.ps1
 ```
 
+Parcours utilisateur de bout en bout (création du PIN, compte, solde, tableau de bord, verrouillage) piloté dans l'app de bureau, sur une base temporaire isolée (`LC_DATA_DIR`, builds de développement uniquement). Les captures d'écran sont écrites dans `target/e2e-captures` :
+
+```bash
+powershell -File scripts/e2e.ps1
+```
+
 ## APK Android
 
 L'APK est construit par GitHub Actions ([`.github/workflows/android.yml`](.github/workflows/android.yml)) à chaque push sur `main` et à chaque tag `v*`. Le build local n'est pas nécessaire (il exige le mode développeur Windows pour les liens symboliques).

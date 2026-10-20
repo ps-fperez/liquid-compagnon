@@ -2,7 +2,7 @@
 # chaque push destiné à produire un APK. Construit l'app de bureau avec les assets embarqués (même
 # configuration que l'APK), la lance avec le débogage WebView2 et vérifie le rendu et la console.
 param(
-    [string]$Expected = 'Liquid Compagnon',
+    [string]$Expected = 'code PIN',
     [int]$Port = 9222
 )
 $ErrorActionPreference = 'Stop'

@@ -1,10 +1,13 @@
-//! Écrans. Ceux marqués « à venir » sont remplis à l'étape 9.
+//! Écrans. Ceux marqués « à venir » sont remplis au fil de l'étape 9.
 
+mod accounts;
+mod dashboard;
 mod gallery;
+mod lock;
 mod placeholders;
 
+pub use accounts::{AccountDetailPage, AccountsPage};
+pub use dashboard::DashboardPage;
 pub use gallery::Gallery;
-pub use placeholders::{
-    AccountDetailPage, AccountsPage, BudgetPage, DashboardPage, NotFound, ProjectionPage,
-    SettingsPage,
-};
+pub use lock::{LockScreen, SetupPin};
+pub use placeholders::{BudgetPage, NotFound, ProjectionPage, SettingsPage};
