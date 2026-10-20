@@ -32,3 +32,4 @@ rules:
   tasks:
     - Découper en tâches de 2 h maximum
     - Chaque tâche de domain/application est livrée avec ses tests unitaires
+    - Toute tâche touchant l'UI, la config Tauri ou le backend se termine par scripts/smoke.ps1 au vert avant push

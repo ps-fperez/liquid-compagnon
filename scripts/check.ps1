@@ -1,4 +1,4 @@
-# Vérification locale : formatage, lint, tests. S'arrête à la première étape en échec.
+﻿# Vérification locale : formatage, lint, tests. S'arrête à la première étape en échec.
 $ErrorActionPreference = 'Stop'
 Set-Location (Join-Path $PSScriptRoot '..')
 

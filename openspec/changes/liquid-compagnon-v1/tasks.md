@@ -10,7 +10,7 @@
 - [x] 2.1 Créer le workspace Cargo (`crates/domain`, `crates/application`, `crates/infrastructure`, `crates/shared-dto`, `src-tauri`, `ui`) avec les dépendances inter-crates conformes à la règle de dépendance (D2)
 - [x] 2.2 Initialiser Tauri 2 dans `src-tauri` (identifiant `com.liquidcompagnon.app`, nom « Liquid Compagnon ») et `cargo tauri android init`
 - [x] 2.3 Initialiser l'UI Leptos CSR avec Trunk et Tailwind v4 ; câbler `beforeDevCommand` / `beforeBuildCommand` / `frontendDist` dans `tauri.conf.json`
-- [ ] 2.4 Commande Tauri `ping` appelée depuis l'UI ; vérifier le fonctionnement en `cargo tauri dev` sur le PC (fenêtre au format téléphone 412 × 892)
+- [x] 2.4 Commande Tauri `ping` appelée depuis l'UI ; vérifier le fonctionnement sur le PC avec le smoke test `scripts/smoke.ps1` (app de bureau, assets embarqués, fenêtre 412 × 892)
 - [x] 2.5 Configurer les profils release (`opt-level="z"`, `lto`, `wasm-opt`), `rustfmt.toml`, clippy, `.gitignore`, et un script de vérification (`fmt` + `clippy -D warnings` + `test`)
 - [x] 2.7 Pipeline GitHub Actions : qualité (fmt, clippy, tests) puis APK arm64 publié en release « dernier-build » (main) et X.Y.Z (tags)
 - [ ] 2.6 Générer un premier APK signé (`cargo tauri android build --apk`, keystore hors dépôt documentée dans le README), le transférer par le canal retenu en 1.3 et l'installer sur le téléphone

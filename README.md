@@ -35,6 +35,12 @@ Vérifications (formatage, clippy, tests) :
 powershell -File scripts/check.ps1
 ```
 
+Smoke test de l'application complète, **obligatoire avant tout push qui produit un APK**. Il construit l'app de bureau avec les assets embarqués (même configuration que l'APK : CSP, protocole `tauri.localhost`), la lance, puis vérifie que l'UI démarre sans erreur et dialogue avec le backend (nécessite Node.js) :
+
+```bash
+powershell -File scripts/smoke.ps1
+```
+
 ## APK Android
 
 L'APK est construit par GitHub Actions ([`.github/workflows/android.yml`](.github/workflows/android.yml)) à chaque push sur `main` et à chaque tag `v*`. Le build local n'est pas nécessaire (il exige le mode développeur Windows pour les liens symboliques).

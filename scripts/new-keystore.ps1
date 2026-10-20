@@ -1,4 +1,4 @@
-# Crée la clé de signature Android de Liquid Compagnon et l'enregistre dans les secrets GitHub du dépôt.
+﻿# Crée la clé de signature Android de Liquid Compagnon et l'enregistre dans les secrets GitHub du dépôt.
 # Le mot de passe est saisi au clavier : il n'est ni affiché, ni écrit sur disque en clair.
 #
 # IMPORTANT : sauvegarde le fichier de clé créé (hors du PC). Sans lui, une nouvelle version de
