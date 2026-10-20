@@ -205,6 +205,28 @@ const backup = await evaluate("window.__TAURI__.core.invoke('export_backup').the
 if (!backup?.includes('"schema_version"') || backup.includes("argon2")) await fail("export invalide ou contenant le PIN");
 await shot("reglages");
 
+console.log("11. Robustesse : import invalide, clé Twelve Data absente");
+const invoke = (command, input) =>
+  evaluate(`window.__TAURI__.core.invoke(${JSON.stringify(command)}, ${JSON.stringify(input === undefined ? {} : { input })})`);
+const rejected = await evaluate(
+  `window.__TAURI__.core.invoke('import_backup', { input: { content: '{"schema_version": 1, "oups": true}' } }).then(() => 'accepté', e => e.code)`,
+);
+if (rejected !== "backup") await fail(`un fichier invalide devait être refusé (résultat : ${rejected})`);
+const remaining = await invoke("list_accounts", { include_archived: true });
+if (remaining?.accounts?.length !== 2) await fail("l'import refusé a modifié les données");
+const pea = remaining.accounts.find((a) => a.account_type === "pea");
+await invoke("upsert_position", {
+  account_id: pea.id,
+  asset: { source: "twelve_data", symbol: "CW8:Euronext", display_name: "Amundi MSCI World", currency: "EUR" },
+  quantity: "2",
+  unit_cost: "500",
+});
+await click("Accueil");
+await waitForText("Ajoutez une clé Twelve Data");
+await waitForText("prix de revient"); // valorisé sans cours ni appel réseau
+await waitForText("12 140,25 €"); // 10 640,25 + 500 + 2 × 500
+await shot("cle-absente");
+
 ws.close();
 if (errors.length > 0) {
   console.error(`ÉCHEC : ${errors.length} erreur(s) dans la WebView`);

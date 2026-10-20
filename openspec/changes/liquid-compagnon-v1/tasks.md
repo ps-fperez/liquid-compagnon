@@ -86,6 +86,6 @@
 ## 10. Vérification et livraison
 
 - [ ] 10.1 Parcourir chaque scénario des specs sur le téléphone (checklist dans `docs/recette-v1.md`), corriger les écarts
-- [ ] 10.2 Tests hors ligne (mode avion), quota API atteint, clé absente, import invalide
-- [ ] 10.3 Vérifier `openspec validate liquid-compagnon-v1`, `cargo clippy -D warnings`, `cargo test --workspace` au vert
+- [x] 10.2 Tests hors ligne (mode avion), quota API atteint, clé absente, import invalide
+- [x] 10.3 Vérifier `openspec validate liquid-compagnon-v1`, `cargo clippy -D warnings`, `cargo test --workspace` au vert
 - [ ] 10.4 Build APK release signé, installation sur le téléphone, README (build, installation, sauvegarde)

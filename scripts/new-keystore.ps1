@@ -27,7 +27,24 @@ $password = Read-Secret 'Mot de passe de la clé (12 caractères minimum)'
 if ($password.Length -lt 12) { throw '12 caractères minimum.' }
 if ($password -ne (Read-Secret 'Confirme le mot de passe')) { throw 'Les mots de passe ne correspondent pas.' }
 
-$keytool = if ($env:JAVA_HOME) { Join-Path $env:JAVA_HOME 'bin\keytool.exe' } else { 'keytool' }
+function Find-Keytool {
+    # JAVA_HOME du processus, puis celui du compte (un terminal ouvert avant sa définition ne le voit pas),
+    # puis les JDK installés, enfin le PATH.
+    # @(...) partout : avec un seul élément, PowerShell renverrait une chaîne et `+=` concaténerait.
+    $homes = @(@($env:JAVA_HOME, [Environment]::GetEnvironmentVariable('JAVA_HOME', 'User')) | Where-Object { $_ })
+    $homes += @(Get-ChildItem 'C:\Program Files\Java', 'C:\Program Files\Eclipse Adoptium', 'C:\Program Files\Microsoft' `
+        -Directory -Filter 'jdk*' -ErrorAction SilentlyContinue |
+        Sort-Object Name -Descending | ForEach-Object FullName)
+    foreach ($javaHome in $homes) {
+        $candidate = Join-Path $javaHome 'bin\keytool.exe'
+        if (Test-Path $candidate) { return $candidate }
+    }
+    $onPath = Get-Command keytool -ErrorAction SilentlyContinue
+    if ($onPath) { return $onPath.Source }
+    throw 'keytool introuvable : installez un JDK ou définissez JAVA_HOME.'
+}
+
+$keytool = Find-Keytool
 New-Item -ItemType Directory -Force $dir | Out-Null
 
 $env:LC_KEYSTORE_PASSWORD = $password

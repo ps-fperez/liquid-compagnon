@@ -1,73 +1,89 @@
 # Liquid Compagnon
 
-Application Android personnelle de suivi de patrimoine et d'épargne : vue agrégée des comptes (Livret A, LDDS, PEA, PEI, crypto), budget, cours en temps réel et projection à 3, 6 et 12 mois. Toutes les données restent sur le téléphone (SQLite local).
+Application Android personnelle de suivi de patrimoine et d'épargne : vue agrégée des comptes (Livret A, LDDS, PEA, PEI, crypto), budget, cours en temps réel et projection à 3, 6 et 12 mois. Toutes les données restent sur le téléphone (SQLite local, aucune sauvegarde cloud) ; seuls les identifiants d'actifs partent vers CoinGecko et Twelve Data pour les cours.
 
-Spécification : [`openspec/changes/liquid-compagnon-v1`](openspec/changes/liquid-compagnon-v1/).
+Spécification : [`openspec/changes/liquid-compagnon-v1`](openspec/changes/liquid-compagnon-v1/). Recette : [`docs/recette-v1.md`](docs/recette-v1.md).
 
 ## Stack
 
-- Tauri 2 (APK Android), backend Rust
-- UI Leptos (CSR) compilée en WebAssembly par Trunk, Tailwind CSS v4
+- Tauri 2 (APK Android), backend Rust ; l'UI dialogue avec lui par l'IPC Tauri (pas de serveur HTTP)
+- UI Leptos (CSR) compilée en WebAssembly par Trunk, Tailwind CSS v4, graphiques SVG générés en Rust
+- SQLite embarqué (`rusqlite`), PIN haché en Argon2id, cours via `reqwest` (rustls + ring)
 - Clean Architecture : workspace Cargo
 
 ```
-crates/domain          entités et règles métier pures
+crates/domain          entités et règles métier pures (aucune I/O)
 crates/application     cas d'usage + ports (traits)
-crates/infrastructure  SQLite, fournisseurs de cours, horloge
-crates/shared-dto      DTO échangés entre UI et backend
-src-tauri/             composition root + commandes Tauri
+crates/infrastructure  SQLite, fournisseurs de cours, horloge, sauvegarde JSON
+crates/shared-dto      contrats échangés entre UI et backend
+src-tauri/             composition root, session, commandes Tauri
 ui/                    Leptos + Tailwind
 ```
 
-## Développement (PC)
+## Installer sur le téléphone
 
-Prérequis : Rust stable, `tauri-cli` 2 (`cargo install tauri-cli --locked`), `trunk` (`cargo install trunk --locked`), cible `wasm32-unknown-unknown`.
+Le téléphone n'est jamais relié au PC : l'APK est construit par GitHub Actions et téléchargé depuis le téléphone.
 
-```bash
-cargo tauri dev
-```
+1. Depuis le téléphone, ouvrir la release voulue sur GitHub (connecté au compte) :
+   - **dernier-build** : dernier commit de `main` ;
+   - **vX.Y.Z** : versions publiées.
+2. Télécharger le fichier `.apk`, autoriser « Installer des applis inconnues » pour le navigateur, ouvrir le fichier.
 
-Ouvre l'application dans une fenêtre au format téléphone (412 × 892), avec rechargement à chaud de l'UI.
+### Mises à jour sans perte de données
 
-Vérifications (formatage, clippy, tests) :
+Une mise à jour s'installe par-dessus la version existante (données conservées) **seulement si les deux APK sont signés avec la même clé**. Sans clé configurée, la CI produit un APK de **debug** dont la signature change à chaque build : il faut alors désinstaller (et perdre les données) avant chaque mise à jour.
 
-```bash
-powershell -File scripts/check.ps1
-```
-
-Smoke test de l'application complète, **obligatoire avant tout push qui produit un APK**. Il construit l'app de bureau avec les assets embarqués (même configuration que l'APK : CSP, protocole `tauri.localhost`), la lance, puis vérifie que l'UI démarre sans erreur et dialogue avec le backend (nécessite Node.js) :
-
-```bash
-powershell -File scripts/smoke.ps1
-```
-
-Parcours utilisateur de bout en bout (création du PIN, compte, solde, tableau de bord, verrouillage) piloté dans l'app de bureau, sur une base temporaire isolée (`LC_DATA_DIR`, builds de développement uniquement). Les captures d'écran sont écrites dans `target/e2e-captures` :
-
-```bash
-powershell -File scripts/e2e.ps1
-```
-
-## APK Android
-
-L'APK est construit par GitHub Actions ([`.github/workflows/android.yml`](.github/workflows/android.yml)) à chaque push sur `main` et à chaque tag `v*`. Le build local n'est pas nécessaire (il exige le mode développeur Windows pour les liens symboliques).
-
-- Dernier build de `main` : release **dernier-build** du dépôt.
-- Versions : releases `vX.Y.Z` (créer un tag `v0.1.0` puis le pousser).
-
-### Installer sur le téléphone
-
-1. Depuis le téléphone, ouvrir la release sur GitHub (connecté au compte) et télécharger le fichier `.apk`.
-2. Autoriser « Installer des applis inconnues » pour le navigateur utilisé.
-3. Ouvrir le fichier téléchargé et installer.
-
-### Signature
-
-Sans clé configurée, la CI produit un APK de **debug** dont la signature change à chaque build : il faut désinstaller l'application avant chaque mise à jour (les données sont perdues).
-
-Pour des mises à jour qui conservent les données, créer une fois la clé de signature :
+Créer la clé une seule fois, avant d'utiliser l'app avec de vraies données :
 
 ```bash
 powershell -File scripts/new-keystore.ps1
 ```
 
-Le script demande un mot de passe, crée `%USERPROFILE%\.liquid-compagnon\release.jks` et enregistre les secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD` et `ANDROID_KEY_ALIAS` dans le dépôt GitHub. **Sauvegarder ce fichier hors du PC** : sans lui, aucune mise à jour ne pourra s'installer par-dessus la version existante.
+Le script demande un mot de passe (jamais affiché ni écrit en clair), crée `%USERPROFILE%\.liquid-compagnon\release.jks` et enregistre les secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD` et `ANDROID_KEY_ALIAS` dans le dépôt GitHub. Les builds suivants sont des APK de release signés. **Sauvegarder `release.jks` hors du PC** : sans lui, plus aucune mise à jour ne pourra s'installer par-dessus la version existante.
+
+### Sauvegarde des données
+
+Réglages › **Exporter mes données** écrit un fichier JSON (sélecteur de fichiers Android). Il contient toutes les données en clair, sans le code PIN ni la clé Twelve Data : le conserver dans un endroit sûr. Réglages › **Importer une sauvegarde** le restaure (fichier entièrement vérifié avant tout remplacement). Un rappel s'affiche si aucun export n'a eu lieu depuis 30 jours.
+
+### Cours des ETF
+
+Les crypto-actifs (CoinGecko) ne demandent aucune clé. Pour les ETF du PEA et les indices de référence du PEI, créer une clé gratuite sur twelvedata.com et la saisir dans Réglages › Cours des ETF.
+
+## Développement (PC)
+
+Prérequis : Rust stable, `tauri-cli` 2 (`cargo install tauri-cli --locked`), `trunk` (`cargo install trunk --locked`), cible `wasm32-unknown-unknown`, Node.js (scripts de test).
+
+```bash
+cargo tauri dev
+```
+
+Ouvre l'application dans une fenêtre au format téléphone (412 × 892), avec rechargement à chaud de l'UI. En développement, la galerie des composants est disponible sur `/galerie`.
+
+### Vérifications
+
+Formatage, clippy (avertissements bloquants) et tests :
+
+```bash
+powershell -File scripts/check.ps1
+```
+
+Smoke test de l'application complète, **obligatoire avant tout push qui produit un APK** : construit l'app de bureau avec les assets embarqués (même configuration que l'APK : CSP, protocole `tauri.localhost`), la lance, vérifie que l'UI démarre sans erreur et que les commandes métier sont refusées tant que la session est verrouillée :
+
+```bash
+powershell -File scripts/smoke.ps1
+```
+
+Parcours utilisateur de bout en bout en 11 étapes (PIN, comptes, budget, saisie rapide, projection, réglages, robustesse), piloté dans l'app de bureau sur une base temporaire isolée (`LC_DATA_DIR`, builds de développement uniquement). Les captures d'écran sont écrites dans `target/e2e-captures` :
+
+```bash
+powershell -File scripts/e2e.ps1
+```
+
+## Publier une version
+
+1. Vérifications au vert (`check`, `smoke`, `e2e`), version mise à jour dans `src-tauri/tauri.conf.json`.
+2. Taguer et pousser : `git tag v0.1.0` puis `git push origin v0.1.0`.
+3. GitHub Actions crée la release `v0.1.0` avec l'APK (signé si la clé est configurée).
+4. Dérouler la recette [`docs/recette-v1.md`](docs/recette-v1.md) sur le téléphone.
+
+Le build Android local n'est pas nécessaire (il exige le mode développeur Windows pour les liens symboliques) : la CI s'en charge ([`.github/workflows/android.yml`](.github/workflows/android.yml)).
