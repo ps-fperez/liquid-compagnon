@@ -25,12 +25,12 @@
 
 ## 4. Domaine — services métier
 
-- [ ] 4.1 `BudgetCalculator` : salaire applicable à un mois, revenus ponctuels du mois, équivalent mensuel des charges actives + tests des scénarios `income-management` et `expense-tracking`
-- [ ] 4.2 `BudgetCalculator::savings_capacity` : moyenne des dépenses des 3 derniers mois complets avec replis (< 3 mois, aucun mois) + tests
-- [ ] 4.3 `PriceBook` et `Valuation` : valeur des comptes Savings / Securities, plus-value latente, provenance (Live / Cached / Estimated / Manual) + tests
-- [ ] 4.4 `PeiEstimator` : estimation par indice, fonds sans référence, recalage manuel + tests (scénario 25 € → 26 €)
-- [ ] 4.5 `ProjectionEngine` : capitalisation mensuelle `(1+r)^(1/12)` en décimal, versements programmés + tests (10 000 € à 3 % → 10 300 € ; 10 000 € + 6 × 300 € → 11 800 €)
-- [ ] 4.6 `ProjectionEngine` : plafonds livrets, épargne non affectée, avertissement de versements excessifs, 3 scénarios × 3/6/12 mois + tests
+- [x] 4.1 `BudgetCalculator` : salaire applicable à un mois, revenus ponctuels du mois, équivalent mensuel des charges actives + tests des scénarios `income-management` et `expense-tracking`
+- [x] 4.2 `BudgetCalculator::savings_capacity` : moyenne des dépenses des 3 derniers mois complets avec replis (< 3 mois, aucun mois) + tests
+- [x] 4.3 `PriceBook` et `Valuation` : valeur des comptes Savings / Securities, plus-value latente, provenance (Live / Cached / Estimated / Manual) + tests
+- [x] 4.4 `PeiEstimator` : estimation par indice, fonds sans référence, recalage manuel + tests (scénario 25 € → 26 €)
+- [x] 4.5 `ProjectionEngine` : capitalisation mensuelle `(1+r)^(1/12)` en décimal, versements programmés + tests (10 000 € à 3 % → 10 300 € ; 10 000 € + 6 × 300 € → 11 800 €)
+- [x] 4.6 `ProjectionEngine` : plafonds livrets, épargne non affectée, avertissement de versements excessifs, 3 scénarios × 3/6/12 mois + tests
 
 ## 5. Application — ports et cas d'usage
 

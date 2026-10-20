@@ -8,11 +8,14 @@ pub mod budget;
 pub mod defaults;
 mod error;
 mod ids;
+mod math;
 mod money;
 mod month;
+pub mod projection;
 mod rate;
 pub mod snapshot;
 mod text;
+pub mod valuation;
 
 pub use error::DomainError;
 pub use ids::{AccountId, CategoryId, ChargeId, ExpenseId, FundId, IncomeId, SalaryId, SnapshotId};
