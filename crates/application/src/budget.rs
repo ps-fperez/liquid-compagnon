@@ -28,6 +28,15 @@ pub struct BudgetSummary {
 
 /// Dépenses d'un mois (éventuellement filtrées par catégorie), de la plus récente à la plus
 /// ancienne.
+/// Libellé de dépense déjà utilisé, proposé à la saisie avec la catégorie de sa dernière
+/// utilisation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LabelSuggestion {
+    pub label: String,
+    pub category: CategoryId,
+    pub uses: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExpenseList {
     pub month: Month,
@@ -81,6 +90,8 @@ pub struct BudgetUseCases {
 }
 
 impl BudgetUseCases {
+    const SUGGESTION_LIMIT: usize = 30;
+
     pub fn new(repo: Arc<dyn BudgetRepository>, clock: Arc<dyn Clock>) -> Self {
         Self { repo, clock }
     }
@@ -288,6 +299,34 @@ impl BudgetUseCases {
         })
     }
 
+    /// Libellés déjà saisis, du plus fréquent au moins fréquent (à fréquence égale, le plus
+    /// récent d'abord), sans distinction de casse.
+    pub fn expense_suggestions(&self) -> AppResult<Vec<LabelSuggestion>> {
+        let mut expenses = self.repo.expenses()?;
+        expenses.sort_by_key(|e| std::cmp::Reverse(e.date()));
+        let mut suggestions: Vec<LabelSuggestion> = Vec::new();
+        for expense in &expenses {
+            let Some(label) = expense.label() else {
+                continue;
+            };
+            let text = label.as_str();
+            match suggestions
+                .iter_mut()
+                .find(|s| s.label.to_lowercase() == text.to_lowercase())
+            {
+                Some(suggestion) => suggestion.uses += 1,
+                None => suggestions.push(LabelSuggestion {
+                    label: text.to_string(),
+                    category: expense.category(),
+                    uses: 1,
+                }),
+            }
+        }
+        suggestions.sort_by_key(|s| std::cmp::Reverse(s.uses));
+        suggestions.truncate(Self::SUGGESTION_LIMIT);
+        Ok(suggestions)
+    }
+
     // --- Aides -----------------------------------------------------------------------------
 
     /// Mois en cours (fuseau de l'utilisateur).
@@ -396,6 +435,40 @@ mod tests {
         let budget = env.budget();
         budget.ensure_default_categories().unwrap();
         budget
+    }
+
+    // Spec expense-tracking : « Libellés suggérés »
+    #[test]
+    fn suggestions_rank_labels_by_use_with_their_latest_category() {
+        let env = TestEnv::new();
+        let budget = ready(&env);
+        let food = category_named(&budget, "Alimentation");
+        let leisure = category_named(&budget, "Loisirs");
+        let add = |label: Option<&str>, category, day| {
+            budget
+                .add_expense(ExpenseInput {
+                    amount: Money::new(dec!(10)),
+                    category,
+                    date: NaiveDate::from_ymd_opt(2026, 10, day),
+                    label: label.map(str::to_string),
+                })
+                .unwrap();
+        };
+        add(Some("Cinéma"), leisure, 1);
+        add(Some("Courses"), leisure, 2);
+        add(Some("courses"), food, 5);
+        add(Some("Boulangerie"), food, 6);
+        add(None, food, 7);
+
+        let suggestions = budget.expense_suggestions().unwrap();
+
+        let labels: Vec<_> = suggestions.iter().map(|s| s.label.as_str()).collect();
+        assert_eq!(labels, ["courses", "Boulangerie", "Cinéma"]);
+        assert_eq!(suggestions[0].uses, 2);
+        assert_eq!(
+            suggestions[0].category, food,
+            "catégorie de la saisie la plus récente"
+        );
     }
 
     #[test]

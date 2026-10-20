@@ -26,8 +26,12 @@ Les comptes PEA et crypto SHALL contenir des positions définies par un actif (i
 - **THEN** la position vaut 9 000,00 €
 
 #### Scenario: Recherche d'actif
-- **WHEN** l'utilisateur tape « CW8 » ou « bitcoin » dans la recherche d'actif
-- **THEN** les actifs correspondants de la source de cotation sont proposés avec leur nom et leur marché
+- **WHEN** l'utilisateur tape « CW8 », un code ISIN ou « bitcoin » dans la recherche d'actif
+- **THEN** les actifs correspondants de la source de cotation sont proposés pendant la frappe (sans valider), avec leur nom et leur marché, les cotations de Paris en tête
+
+#### Scenario: Actifs populaires
+- **WHEN** l'utilisateur ouvre la recherche d'actif sans rien saisir
+- **THEN** les ETF éligibles au PEA les plus courants (ou les principales crypto pour un portefeuille crypto) sont proposés et se choisissent en un geste, sans appel réseau
 
 #### Scenario: Plus-value latente
 - **WHEN** un prix de revient est renseigné

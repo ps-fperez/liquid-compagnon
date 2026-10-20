@@ -49,6 +49,9 @@ async function shot(name) {
   const file = join(shots, `${String(++step).padStart(2, "0")}-${name}.png`);
   writeFileSync(file, Buffer.from(data, "base64"));
   console.log(`  capture : ${file}`);
+  // Texte UTF-8 relu comme ANSI (« DÃ©tail ») : un fichier source a été mal réencodé.
+  const garbled = (await bodyText())?.match(/\S*[ÃÂ][\u0080-¿©¨‰§ª´·]\S*/);
+  if (garbled) await fail(`texte mal encodé à l'écran : « ${garbled[0]} »`);
 }
 
 async function fail(message) {
@@ -111,6 +114,13 @@ await waitForText("Confirmez votre code PIN");
 await typePin("1234");
 await click("Valider");
 
+console.log("1 bis. Didacticiel de prise en main");
+await waitForText("Bienvenue dans Liquid Compagnon");
+await shot("didacticiel");
+for (let i = 0; i < 4; i++) await click("Suivant");
+await waitForText("Discret et protégé");
+await click("Découvrir l'application");
+
 console.log("2. Tableau de bord vide");
 await waitForText("Patrimoine total");
 await waitForText("Ajoutez votre premier compte");
@@ -154,8 +164,8 @@ await waitForText("Patrimoine total");
 
 console.log("7. Budget : salaire, dépense en saisie rapide, charge fixe");
 await click("Budget");
-await waitForText("Salaire net mensuel");
-await click("Nouveau salaire");
+await waitForText("Renseignez votre salaire net");
+await click("Ajouter mon salaire"); // ajout directement depuis la carte vide
 await fill("Salaire net mensuel (net à payer)", "3200");
 await click("Enregistrer");
 await waitForText("3 200,00 €");
@@ -163,15 +173,24 @@ await click("Saisie rapide");
 await click("Dépense");
 await waitForText("Nouvelle dépense");
 await fill("Montant", "42,50");
-await click("Alimentation"); // 3e interaction : la catégorie enregistre
+await click("Date et libellé");
+await fill("Libellé (facultatif)", "Courses");
+await click("Alimentation"); // la catégorie enregistre
 await waitForText("42,50 €");
+// Libellé habituel : reprend libellé et catégorie, et enregistre en un geste.
+await click("Saisie rapide");
+await click("Dépense");
+await fill("Montant", "10");
+await waitForText("Habituelles");
+await click("Courses · Alimentation");
+await waitForText("52,50 €");
 await click("Ajouter une charge fixe");
 await fill("Libellé", "Loyer");
 await fill("Montant", "1300");
 await click("Logement");
 await click("Enregistrer");
 await waitForText("Loyer");
-await waitForText("1 857,50 €"); // 3 200 − 1 300 − 42,50 (seul mois de dépenses)
+await waitForText("1 847,50 €"); // 3 200 − 1 300 − 52,50 (seul mois de dépenses)
 await shot("budget");
 
 console.log("8. Projection");
@@ -192,8 +211,24 @@ await click("Enregistrer");
 await waitForText("500,00 €");
 await shot("pea");
 // Recherche d'actif : Yahoo Finance proposé par défaut, Twelve Data au choix (sans appel réseau).
-await click("Ajouter une position");
-await waitForText("Yahoo Finance");
+await click("Ajouter une position"); // depuis la carte vide
+await waitForText("Populaires");
+await shot("pea-populaires");
+await click("MSCI World (CW8)"); // suggestion choisie en un geste, sans réseau
+await waitForText("CW8.PA");
+await click("Changer");
+if (process.env.LC_E2E_LIVE) {
+  // Autocomplétion réelle (réseau) : résultats Yahoo Finance pendant la frappe, sans valider.
+  await evaluate(`(() => {
+    const input = document.querySelector('[aria-label="Rechercher un actif"]');
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+    setter.call(input, "LU1681043599"); // ISIN de CW8
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  })()`);
+  await waitForText("CW8.PA", 10000);
+  await shot("autocompletion-live");
+  await click("Effacer la recherche");
+}
 await click("Twelve Data");
 const checked = await evaluate(`document.querySelector('[role="dialog"] [role="radio"][aria-checked="true"]')?.textContent.trim()`);
 if (checked !== "Twelve Data") await fail(`source sélectionnée inattendue : ${checked}`);

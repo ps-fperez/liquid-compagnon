@@ -94,6 +94,14 @@ impl SecurityUseCases {
         Ok(self.settings.set_biometric_enabled(enabled)?)
     }
 
+    pub fn onboarding_done(&self) -> AppResult<bool> {
+        Ok(self.settings.onboarding_done()?)
+    }
+
+    pub fn set_onboarding_done(&self, done: bool) -> AppResult<()> {
+        Ok(self.settings.set_onboarding_done(done)?)
+    }
+
     pub fn has_twelve_data_api_key(&self) -> AppResult<bool> {
         Ok(self.settings.twelve_data_api_key()?.is_some())
     }

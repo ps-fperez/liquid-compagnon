@@ -55,10 +55,19 @@ pub fn PeiDetails(
                         }
                     }).collect_view().into_any()
                 } else {
-                    view! { <EmptyState title="Aucun fonds" body="Ajoutez les fonds de votre plan d'épargne salariale." /> }.into_any()
+                    view! {
+                        <EmptyState
+                            title="Aucun fonds"
+                            body="Ajoutez les fonds de votre plan d'épargne salariale avec leur valeur de part."
+                            action="Ajouter un fonds"
+                            on_action=Callback::new(move |_| new_open.set(true))
+                        />
+                    }.into_any()
                 }}
             </Card>
-            <button class=BTN_PRIMARY on:click=move |_| new_open.set(true)>"Ajouter un fonds"</button>
+            {has_funds.then(|| view! {
+                <button class=BTN_PRIMARY on:click=move |_| new_open.set(true)>"Ajouter un fonds"</button>
+            })}
         </section>
 
         <NewFundSheet open=new_open account_id=account_id.get_value() on_saved=on_saved />

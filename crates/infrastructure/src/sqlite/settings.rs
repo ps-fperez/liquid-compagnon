@@ -8,6 +8,7 @@ const PIN_HASH: &str = "pin_hash";
 const UNLOCK_FAILURES: &str = "unlock_failures";
 const UNLOCK_LOCKED_UNTIL: &str = "unlock_locked_until";
 const BIOMETRIC_ENABLED: &str = "biometric_enabled";
+const ONBOARDING_DONE: &str = "onboarding_done";
 const TWELVE_DATA_API_KEY: &str = "twelve_data_api_key";
 const LAST_EXPORT_AT: &str = "last_export_at";
 
@@ -92,6 +93,14 @@ impl SettingsStore for SqliteSettingsStore {
         self.set(BIOMETRIC_ENABLED, Some(enabled.to_string()))
     }
 
+    fn onboarding_done(&self) -> StorageResult<bool> {
+        Ok(self.get(ONBOARDING_DONE)?.as_deref() == Some("true"))
+    }
+
+    fn set_onboarding_done(&self, done: bool) -> StorageResult<()> {
+        self.set(ONBOARDING_DONE, Some(done.to_string()))
+    }
+
     fn twelve_data_api_key(&self) -> StorageResult<Option<String>> {
         self.get(TWELVE_DATA_API_KEY)
     }
@@ -127,6 +136,7 @@ mod tests {
         assert_eq!(store.pin_hash().unwrap(), None);
         assert_eq!(store.unlock_attempts().unwrap(), UnlockAttempts::default());
         assert!(!store.biometric_enabled().unwrap());
+        assert!(!store.onboarding_done().unwrap());
         assert_eq!(store.twelve_data_api_key().unwrap(), None);
         assert_eq!(store.last_export_at().unwrap(), None);
     }
@@ -147,12 +157,14 @@ mod tests {
         store.set_pin_hash("$argon2id$hash").unwrap();
         store.set_unlock_attempts(attempts).unwrap();
         store.set_biometric_enabled(true).unwrap();
+        store.set_onboarding_done(true).unwrap();
         store.set_twelve_data_api_key(Some("key")).unwrap();
         store.set_last_export_at(at).unwrap();
 
         assert_eq!(store.pin_hash().unwrap().as_deref(), Some("$argon2id$hash"));
         assert_eq!(store.unlock_attempts().unwrap(), attempts);
         assert!(store.biometric_enabled().unwrap());
+        assert!(store.onboarding_done().unwrap());
         assert_eq!(store.twelve_data_api_key().unwrap().as_deref(), Some("key"));
         assert_eq!(store.last_export_at().unwrap(), Some(at));
 

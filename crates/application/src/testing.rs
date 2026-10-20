@@ -306,6 +306,7 @@ pub struct InMemorySettings {
     pin_hash: Mutex<Option<String>>,
     attempts: Mutex<UnlockAttempts>,
     biometric: Mutex<bool>,
+    onboarding: Mutex<bool>,
     api_key: Mutex<Option<String>>,
     last_export: Mutex<Option<DateTime<Utc>>>,
 }
@@ -330,6 +331,13 @@ impl SettingsStore for InMemorySettings {
     }
     fn set_biometric_enabled(&self, enabled: bool) -> StorageResult<()> {
         *lock(&self.biometric) = enabled;
+        Ok(())
+    }
+    fn onboarding_done(&self) -> StorageResult<bool> {
+        Ok(*lock(&self.onboarding))
+    }
+    fn set_onboarding_done(&self, done: bool) -> StorageResult<()> {
+        *lock(&self.onboarding) = done;
         Ok(())
     }
     fn twelve_data_api_key(&self) -> StorageResult<Option<String>> {

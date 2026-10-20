@@ -67,6 +67,14 @@ pub struct ExpenseDto {
     pub label: Option<String>,
 }
 
+/// Libellé déjà utilisé, proposé à la saisie d'une dépense avec sa dernière catégorie.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LabelSuggestionDto {
+    pub label: String,
+    pub category_id: String,
+    pub uses: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExpenseListDto {
     pub month: String,

@@ -65,7 +65,14 @@ pub fn SecuritiesDetails(
                         }
                     }).collect_view().into_any()
                 } else {
-                    view! { <EmptyState title="Aucune position" body="Ajoutez les titres ou crypto-actifs que vous détenez." /> }.into_any()
+                    view! {
+                        <EmptyState
+                            title="Aucune position"
+                            body="Ajoutez les titres ou crypto-actifs que vous détenez : leur cours se met à jour tout seul."
+                            action="Ajouter une position"
+                            on_action=Callback::new(move |_| new_open.set(true))
+                        />
+                    }.into_any()
                 }}
                 <button
                     class="flex min-h-14 items-center justify-between rounded-xl border-t border-line px-3 text-left active:bg-surface-raised"
@@ -75,7 +82,9 @@ pub fn SecuritiesDetails(
                     <Amount value=cash />
                 </button>
             </Card>
-            <button class=BTN_PRIMARY on:click=move |_| new_open.set(true)>"Ajouter une position"</button>
+            {has_positions.then(|| view! {
+                <button class=BTN_PRIMARY on:click=move |_| new_open.set(true)>"Ajouter une position"</button>
+            })}
         </section>
 
         <CashSheet open=cash_open account_id=account_id.get_value() cash=cash on_saved=on_saved />
@@ -169,7 +178,7 @@ fn PositionForm(
     let placeholder = if sources.contains(&QuoteSourceDto::CoinGecko) {
         "bitcoin, ethereum…"
     } else {
-        "CW8, IWDA, Amundi MSCI World…"
+        "CW8, IWDA ou code ISIN…"
     };
     view! {
         <div class="flex flex-col gap-4">

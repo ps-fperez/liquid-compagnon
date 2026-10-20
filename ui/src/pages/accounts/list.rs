@@ -52,11 +52,12 @@ pub fn AccountsPage() -> impl IntoView {
             None => view! { <Skeleton class="h-48" /> }.into_any(),
             Some(Err(error)) => view! { <ErrorBanner message=error.message /> }.into_any(),
             Some(Ok(list)) if list.accounts.is_empty() => view! {
-                <Card>
-                    <EmptyState title="Ajoutez votre premier compte" body="Livret A, LDDS, PEA, PEI ou portefeuille crypto.">
-                        <button class=BTN_PRIMARY on:click=move |_| create_open.set(true)>"Ajouter un compte"</button>
-                    </EmptyState>
-                </Card>
+                <EmptyState
+                    title="Ajoutez votre premier compte"
+                    body="Livret A, LDDS, PEA, PEI ou portefeuille crypto."
+                    action="Ajouter un compte"
+                    on_action=Callback::new(move |_| create_open.set(true))
+                />
             }
             .into_any(),
             Some(Ok(list)) => {

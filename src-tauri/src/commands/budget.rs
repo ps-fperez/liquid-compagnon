@@ -183,6 +183,22 @@ pub async fn delete_one_off_income(state: AppState<'_>, input: IdInput) -> Comma
 // --- Charges fixes ------------------------------------------------------------------------
 
 #[tauri::command]
+pub async fn expense_suggestions(state: AppState<'_>) -> CommandResult<Vec<LabelSuggestionDto>> {
+    blocking(unlocked(&state)?, |services| {
+        let suggestions = services.budget.expense_suggestions().map_err(app_error)?;
+        Ok(suggestions
+            .into_iter()
+            .map(|s| LabelSuggestionDto {
+                label: s.label,
+                category_id: s.category.to_string(),
+                uses: u32::try_from(s.uses).unwrap_or(u32::MAX),
+            })
+            .collect())
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn list_charges(state: AppState<'_>) -> CommandResult<Vec<ChargeDto>> {
     blocking(unlocked(&state)?, |services| {
         let charges = services.budget.charges().map_err(app_error)?;

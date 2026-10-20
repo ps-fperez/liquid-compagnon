@@ -43,7 +43,14 @@ pub fn ChargesSection(
             {move || {
                 let list = charges.get().and_then(Result::ok).unwrap_or_default();
                 if list.is_empty() {
-                    return view! { <Card><EmptyState title="Aucune charge fixe" body="Loyer, assurances, abonnements : saisissez-les une fois." /></Card> }.into_any();
+                    return view! {
+                        <EmptyState
+                            title="Aucune charge fixe"
+                            body="Loyer, assurances, abonnements : saisissez-les une fois, elles comptent chaque mois."
+                            action="Ajouter une charge fixe"
+                            on_action=Callback::new(move |_| new_open.set(true))
+                        />
+                    }.into_any();
                 }
                 view! {
                     <Card class="flex flex-col p-2">

@@ -95,3 +95,12 @@
 - [x] 11.1 Twelve Data : symboles hors offre (403 par symbole, 404 seul) signalés `NotCovered` au lieu d'être ignorés, 401 = clé absente ou invalide, offre requise affichée dans la recherche (`show_plan`), vérification de la clé par `/api_usage`.
 - [x] 11.2 Source Yahoo Finance sans clé (`QuoteSource::Yahoo`, `CW8.PA`) : cours, conversion de devises (pence `GBp` compris), recherche ; source par défaut des PEA et références PEI, Twelve Data au choix dans la recherche d'actif.
 - [x] 11.3 Bandeau « non couvert » nommant les actifs, sauvegarde JSON et SQLite étendues à la nouvelle source (format inchangé).
+
+## 12. Expérience utilisateur
+
+- [x] 12.1 Didacticiel de prise en main en cinq écrans (balayage, « Passer »), mémorisé dans les réglages locaux, « Revoir le didacticiel » dans les réglages
+- [x] 12.2 Icône engrenage pour les réglages
+- [x] 12.3 États vides actionnables : la carte vide ouvre directement l'ajout (comptes, positions, fonds, salaire, charges, dépenses, projection)
+- [x] 12.4 Recherche d'actif avec autocomplétion (délai de 400 ms, réponses périmées ignorées), recherche par ISIN, Paris en tête, actifs populaires en un geste
+- [x] 12.5 Libellés de dépense suggérés avec leur catégorie (« Habituelles », autocomplétion du libellé)
+- [x] 12.6 Parcours e2e étendu (didacticiel, suggestions, cartes vides, contrôle d'encodage, étape réseau facultative `LC_E2E_LIVE`)

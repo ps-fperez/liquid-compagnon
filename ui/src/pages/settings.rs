@@ -12,6 +12,7 @@ use crate::components::style::{BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, SECTION_T
 use crate::components::{BottomSheet, Card, ErrorBanner, Field, Skeleton};
 use crate::files;
 use crate::format;
+use crate::shell::use_onboarding;
 use crate::state::{session_locked, use_session};
 use crate::util::{load, run_action};
 
@@ -19,6 +20,7 @@ use crate::util::{load, run_action};
 pub fn SettingsPage() -> impl IntoView {
     let settings = RwSignal::new(None::<Result<SettingsDto, ErrorDto>>);
     let version = RwSignal::new(None::<Result<PingResponse, ErrorDto>>);
+    let onboarding = use_onboarding();
     let reload = Callback::new(move |_: ()| load(settings, api::get_settings));
     reload.run(());
     load(version, api::ping);
@@ -35,6 +37,13 @@ pub fn SettingsPage() -> impl IntoView {
             }
             .into_any(),
         }}
+        <section class="flex flex-col gap-2">
+            <h2 class=SECTION_TITLE>"Aide"</h2>
+            <Card class="flex flex-col gap-3">
+                <p class="text-sm text-muted">"Les principales fonctions de l'application en cinq écrans."</p>
+                <button class=BTN_SECONDARY on:click=move |_| onboarding.replay()>"Revoir le didacticiel"</button>
+            </Card>
+        </section>
         <p class="px-1 text-center text-xs text-muted">
             "Liquid Compagnon "
             {move || version.get().and_then(Result::ok).map(|v| format!("v{}", v.backend_version))}

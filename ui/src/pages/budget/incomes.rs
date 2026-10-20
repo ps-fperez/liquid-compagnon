@@ -6,7 +6,7 @@ use leptos::prelude::*;
 
 use crate::api;
 use crate::components::style::{BTN_DANGER, BTN_GHOST, BTN_PRIMARY, SECTION_TITLE};
-use crate::components::{Amount, BottomSheet, Card, Field};
+use crate::components::{Amount, BottomSheet, Card, EmptyState, Field};
 use crate::format;
 use crate::util::{Loaded, current_month, run_action, today};
 
@@ -36,24 +36,41 @@ pub fn IncomesSection(
                 <h2 class=SECTION_TITLE>"Revenus"</h2>
                 <button class=BTN_GHOST on:click=move |_| new_salary.set(true)>"Nouveau salaire"</button>
             </div>
-            <Card class="flex flex-col gap-1 p-2">
-                <div class="flex items-center justify-between px-2 py-1">
-                    <span class="text-sm text-muted">"Salaire net mensuel"</span>
-                    {move || view! { <Amount value=salary() class="font-semibold" /> }}
-                </div>
-                {move || salaries.get().and_then(Result::ok).unwrap_or_default().into_iter().map(|entry| {
-                    let open = entry.clone();
-                    view! {
-                        <button
-                            class="flex min-h-11 items-center justify-between rounded-xl px-2 text-left text-sm active:bg-surface-raised"
-                            on:click=move |_| editing_salary.set(Some(open.clone()))
-                        >
-                            <span class="text-muted">"depuis " {format::month_label(&entry.effective_from)}</span>
-                            <Amount value=entry.net_amount />
-                        </button>
+            {move || {
+                let entries = salaries.get().and_then(Result::ok).unwrap_or_default();
+                if entries.is_empty() {
+                    return view! {
+                        <EmptyState
+                            title="Renseignez votre salaire net"
+                            body="Il sert à calculer votre capacité d'épargne et la projection."
+                            action="Ajouter mon salaire"
+                            on_action=Callback::new(move |_| new_salary.set(true))
+                        />
                     }
-                }).collect_view()}
-            </Card>
+                    .into_any();
+                }
+                view! {
+                    <Card class="flex flex-col gap-1 p-2">
+                        <div class="flex items-center justify-between px-2 py-1">
+                            <span class="text-sm text-muted">"Salaire net mensuel"</span>
+                            {move || view! { <Amount value=salary() class="font-semibold" /> }}
+                        </div>
+                        {entries.into_iter().map(|entry| {
+                            let open = entry.clone();
+                            view! {
+                                <button
+                                    class="flex min-h-11 items-center justify-between rounded-xl px-2 text-left text-sm active:bg-surface-raised"
+                                    on:click=move |_| editing_salary.set(Some(open.clone()))
+                                >
+                                    <span class="text-muted">"depuis " {format::month_label(&entry.effective_from)}</span>
+                                    <Amount value=entry.net_amount />
+                                </button>
+                            }
+                        }).collect_view()}
+                    </Card>
+                }
+                .into_any()
+            }}
 
             <div class="flex items-center justify-between">
                 <span class="px-1 text-sm text-muted">"Revenus ponctuels du mois"</span>

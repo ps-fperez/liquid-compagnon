@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
-use lc_shared_dto::{CategoryDto, ExpenseDto, ExpenseInput, ExpenseListDto, IdInput, NaiveDate};
+use lc_shared_dto::{
+    CategoryDto, ExpenseDto, ExpenseInput, ExpenseListDto, IdInput, LabelSuggestionDto, NaiveDate,
+};
 use leptos::prelude::*;
+use leptos::task::spawn_local;
 
 use crate::api;
 use crate::components::style::{BTN_DANGER, BTN_GHOST, BTN_PRIMARY, LABEL, SECTION_TITLE};
@@ -56,7 +59,12 @@ pub fn ExpensesSection(
                 None => view! { <Skeleton class="h-32" /> }.into_any(),
                 Some(Err(error)) => view! { <ErrorBanner message=error.message /> }.into_any(),
                 Some(Ok(list)) if list.items.is_empty() => view! {
-                    <Card><EmptyState title="Aucune dépense" body="Touchez « Ajouter » ou le bouton + pour en saisir une." /></Card>
+                    <EmptyState
+                        title="Aucune dépense ce mois-ci"
+                        body="Un montant, une catégorie : c'est noté."
+                        action="Ajouter une dépense"
+                        on_action=Callback::new(move |_| open_new.set(true))
+                    />
                 }
                 .into_any(),
                 Some(Ok(list)) => {
@@ -167,6 +175,7 @@ pub fn ExpenseSheet(
                 amount.set(String::new());
                 label.set(String::new());
                 category.set(None);
+                more.set(false);
             }
             open.set(false);
             on_saved.run(());
@@ -186,6 +195,68 @@ pub fn ExpenseSheet(
         );
     };
 
+    // Libellés déjà saisis : rechargés à chaque ouverture pour inclure la dernière saisie.
+    let suggestions = RwSignal::new(Vec::<LabelSuggestionDto>::new());
+    Effect::new(move |_| {
+        if open.get() {
+            spawn_local(async move {
+                if let Ok(found) = api::expense_suggestions().await {
+                    suggestions.set(found);
+                }
+            });
+        }
+    });
+    // Toucher une suggestion reprend son libellé et sa catégorie ; pour une nouvelle dépense,
+    // elle est enregistrée aussitôt (comme les catégories).
+    let apply = move |suggestion: LabelSuggestionDto| {
+        label.set(suggestion.label);
+        category.set(Some(suggestion.category_id.clone()));
+        if !editing {
+            save(suggestion.category_id);
+        }
+    };
+    let category_name = move |id: &str| {
+        categories.with(|list| {
+            list.iter()
+                .find(|c| c.id == id && !c.archived)
+                .map(|c| c.name.clone())
+        })
+    };
+    // Suggestions dont la catégorie existe toujours, filtrées par le libellé en cours de saisie.
+    let matching = move |limit: usize| {
+        let typed = fold(&label.get());
+        suggestions
+            .get()
+            .into_iter()
+            .filter_map(|s| category_name(&s.category_id).map(|name| (s, name)))
+            .filter(|(s, _)| {
+                let candidate = fold(&s.label);
+                typed.is_empty() || (candidate.contains(&typed) && candidate != typed)
+            })
+            .take(limit)
+            .collect::<Vec<_>>()
+    };
+    let chips = move |items: Vec<(LabelSuggestionDto, String)>| {
+        items
+            .into_iter()
+            .map(|(suggestion, category)| {
+                let text = suggestion.label.clone();
+                let description = format!("{text} · {category}");
+                view! {
+                    <button
+                        aria-label=description
+                        class="flex min-h-9 items-center gap-1.5 rounded-full border border-line bg-surface-raised px-3 text-sm active:border-primary active:bg-primary/15"
+                        disabled=move || busy.get()
+                        on:click=move |_| apply(suggestion.clone())
+                    >
+                        {text}
+                        <span class="text-xs text-muted">{category}</span>
+                    </button>
+                }
+            })
+            .collect_view()
+    };
+
     let usable = move || {
         let original = ids.get_value().1;
         categories
@@ -199,9 +270,24 @@ pub fn ExpenseSheet(
         <BottomSheet open=open title=if editing { "Dépense" } else { "Nouvelle dépense" }>
             <div class="flex flex-col gap-4">
                 <Field label="Montant" value=amount input_mode="decimal" suffix="€" placeholder="0,00" />
+                {move || {
+                    let frequent = if editing || more.get() { Vec::new() } else { matching(4) };
+                    (!frequent.is_empty()).then(|| view! {
+                        <div class="flex flex-col gap-1.5">
+                            <span class=LABEL>"Habituelles (touchez pour enregistrer)"</span>
+                            <div class="flex flex-wrap gap-2">{chips(frequent)}</div>
+                        </div>
+                    })
+                }}
                 <Show when=move || more.get()>
                     <Field label="Date" value=date input_type="date" />
                     <Field label="Libellé (facultatif)" value=label placeholder="Courses du marché" />
+                    {move || {
+                        let found = if label.with(|l| l.trim().is_empty()) { Vec::new() } else { matching(4) };
+                        (!found.is_empty()).then(|| view! {
+                            <div class="-mt-2 flex flex-wrap gap-2" aria-label="Libellés déjà utilisés">{chips(found)}</div>
+                        })
+                    }}
                 </Show>
                 <Show when=move || !more.get()>
                     <button class=format!("{BTN_GHOST} self-start px-0") on:click=move |_| more.set(true)>"Date et libellé"</button>
@@ -251,4 +337,21 @@ pub fn ExpenseSheet(
             </div>
         </BottomSheet>
     }
+}
+
+/// Forme comparable d'un libellé : minuscules, sans accents.
+fn fold(text: &str) -> String {
+    text.trim()
+        .to_lowercase()
+        .chars()
+        .map(|c| match c {
+            'à' | 'â' | 'ä' => 'a',
+            'é' | 'è' | 'ê' | 'ë' => 'e',
+            'î' | 'ï' => 'i',
+            'ô' | 'ö' => 'o',
+            'ù' | 'û' | 'ü' => 'u',
+            'ç' => 'c',
+            other => other,
+        })
+        .collect()
 }

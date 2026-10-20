@@ -10,7 +10,7 @@ use leptos_router::components::A;
 
 use crate::api;
 use crate::charts::{AllocationBar, AllocationSegment, LineChart, Series, to_f64};
-use crate::components::style::{BTN_ICON, BTN_PRIMARY, SECTION_TITLE};
+use crate::components::style::{BTN_ICON, SECTION_TITLE};
 use crate::components::{
     Amount, Card, EmptyState, ErrorBanner, GlowCard, ProvenanceBadge, Skeleton,
 };
@@ -179,11 +179,12 @@ fn Overview(
                 .into_any()
             } else {
                 view! {
-                    <Card>
-                        <EmptyState title="Ajoutez votre premier compte" body="Livret A, LDDS, PEA, PEI ou portefeuille crypto.">
-                            <A href="/comptes?nouveau=1" attr:class=BTN_PRIMARY>"Ajouter un compte"</A>
-                        </EmptyState>
-                    </Card>
+                    <EmptyState
+                        title="Ajoutez votre premier compte"
+                        body="Livret A, LDDS, PEA, PEI ou portefeuille crypto."
+                        action="Ajouter un compte"
+                        href="/comptes?nouveau=1"
+                    />
                 }
                 .into_any()
             }}

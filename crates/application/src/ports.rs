@@ -123,6 +123,9 @@ pub trait SettingsStore: Send + Sync {
     fn set_unlock_attempts(&self, attempts: UnlockAttempts) -> StorageResult<()>;
     fn biometric_enabled(&self) -> StorageResult<bool>;
     fn set_biometric_enabled(&self, enabled: bool) -> StorageResult<()>;
+    /// Didacticiel de prise en main déjà parcouru (ou passé).
+    fn onboarding_done(&self) -> StorageResult<bool>;
+    fn set_onboarding_done(&self, done: bool) -> StorageResult<()>;
     fn twelve_data_api_key(&self) -> StorageResult<Option<String>>;
     fn set_twelve_data_api_key(&self, key: Option<&str>) -> StorageResult<()>;
     fn last_export_at(&self) -> StorageResult<Option<DateTime<Utc>>>;

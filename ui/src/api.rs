@@ -99,6 +99,7 @@ commands_without_input! {
     // Budget
     salary_history -> Vec<SalaryDto>;
     list_charges -> Vec<ChargeDto>;
+    expense_suggestions -> Vec<LabelSuggestionDto>;
 }
 
 commands_with_input! {
@@ -106,6 +107,7 @@ commands_with_input! {
     unlock(PinInput) -> ();
     change_pin(ChangePinInput) -> ();
     set_biometric_enabled(ToggleInput) -> ();
+    set_onboarding_done(ToggleInput) -> ();
     set_twelve_data_api_key(ApiKeyInput) -> ();
     import_backup(ImportInput) -> ImportSummaryDto;
     get_dashboard(RefreshInput) -> DashboardDto;

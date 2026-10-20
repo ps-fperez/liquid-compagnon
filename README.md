@@ -87,6 +87,8 @@ Parcours utilisateur de bout en bout en 11 étapes (PIN, comptes, budget, saisie
 powershell -File scripts/e2e.ps1
 ```
 
+Avec `LC_E2E_LIVE=1`, le parcours ajoute une étape réseau : autocomplétion réelle d'un ETF par son ISIN via Yahoo Finance.
+
 ## Publier une version
 
 1. Vérifications au vert (`check`, `smoke`, `e2e`), version mise à jour dans `src-tauri/tauri.conf.json`.

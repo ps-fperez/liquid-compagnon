@@ -113,11 +113,24 @@ impl YahooFinanceProvider {
     }
 }
 
+/// Ordre d'affichage des places : Paris (0), autres places de la zone euro (1), le reste (2).
+fn place_rank(symbol: &str) -> u8 {
+    match symbol.rsplit_once('.').map(|(_, suffix)| suffix) {
+        Some("PA") => 0,
+        Some(suffix) if EURO_PLACES.contains(&suffix) => 1,
+        _ => 2,
+    }
+}
+
+const EURO_PLACES: [&str; 11] = [
+    "PA", "AS", "DE", "F", "MI", "BR", "MC", "LS", "VI", "HE", "IR",
+];
+
 /// Devise probable d'après le suffixe de place (informative : la conversion utilise la devise
 /// renvoyée avec le cours).
 fn currency_for(symbol: &str) -> &'static str {
     match symbol.rsplit_once('.').map(|(_, suffix)| suffix) {
-        Some("PA" | "AS" | "DE" | "F" | "MI" | "BR" | "MC" | "LS" | "VI" | "HE" | "IR") => "EUR",
+        Some(suffix) if EURO_PLACES.contains(&suffix) => "EUR",
         Some("L") => "GBP",
         Some("SW") => "CHF",
         Some(_) => "EUR",
@@ -169,7 +182,7 @@ impl PriceProvider for YahooFinanceProvider {
         let items = body["quotes"]
             .as_array()
             .ok_or_else(|| PriceError::InvalidResponse("liste « quotes » absente".into()))?;
-        Ok(items
+        let mut found: Vec<AssetRef> = items
             .iter()
             .filter(|item| {
                 item["quoteType"]
@@ -189,7 +202,10 @@ impl PriceProvider for YahooFinanceProvider {
                 let currency = CurrencyCode::new(currency_for(symbol)).ok()?;
                 AssetRef::new(QuoteSource::Yahoo, symbol, &display_name, currency).ok()
             })
-            .collect())
+            .collect();
+        // Cotations éligibles au PEA en tête : Paris, puis le reste de la zone euro.
+        found.sort_by_key(|asset| place_rank(asset.symbol()));
+        Ok(found)
     }
 }
 
@@ -357,7 +373,8 @@ mod tests {
                 "quotes": [
                     { "symbol": "CW8.PA", "quoteType": "ETF", "longname": "Amundi MSCI World Swap UCITS ETF EUR Acc", "exchDisp": "Paris" },
                     { "symbol": "CW8U.L", "quoteType": "ETF", "shortname": "AMUNDI MSCI WORLD", "exchDisp": "London" },
-                    { "symbol": "EURUSD=X", "quoteType": "CURRENCY", "shortname": "EUR/USD" }
+                    { "symbol": "EURUSD=X", "quoteType": "CURRENCY", "shortname": "EUR/USD" },
+                    { "symbol": "CW8.MI", "quoteType": "ETF", "shortname": "AMUNDI MSCI WORLD", "exchDisp": "Milan" }
                 ]
             })))
             .mount(&server)
@@ -365,13 +382,17 @@ mod tests {
 
         let results = provider(&server).search("CW8").await.unwrap();
 
-        assert_eq!(results.len(), 2);
-        assert_eq!(results[0].symbol(), "CW8.PA");
+        let symbols: Vec<_> = results.iter().map(AssetRef::symbol).collect();
+        assert_eq!(
+            symbols,
+            ["CW8.PA", "CW8.MI", "CW8U.L"],
+            "Paris, zone euro, puis le reste"
+        );
         assert_eq!(
             results[0].display_name(),
             "Amundi MSCI World Swap UCITS ETF EUR Acc · Paris"
         );
         assert_eq!(results[0].currency().as_str(), "EUR");
-        assert_eq!(results[1].currency().as_str(), "GBP");
+        assert_eq!(results[2].currency().as_str(), "GBP");
     }
 }

@@ -107,7 +107,20 @@ pub async fn get_settings(app: AppHandle, state: AppState<'_>) -> CommandResult<
                 .map_err(app_error)?,
             last_export_at,
             export_reminder_due: services.backup.export_reminder_due().map_err(app_error)?,
+            onboarding_done: services.security.onboarding_done().map_err(app_error)?,
         })
+    })
+    .await
+}
+
+/// Marque le didacticiel comme parcouru (`false` pour le revoir au prochain affichage).
+#[tauri::command]
+pub async fn set_onboarding_done(state: AppState<'_>, input: ToggleInput) -> CommandResult<()> {
+    blocking(unlocked(&state)?, move |services| {
+        services
+            .security
+            .set_onboarding_done(input.enabled)
+            .map_err(app_error)
     })
     .await
 }

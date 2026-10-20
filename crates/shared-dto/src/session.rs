@@ -66,6 +66,8 @@ pub struct SettingsDto {
     pub has_twelve_data_key: bool,
     pub last_export_at: Option<DateTime<Utc>>,
     pub export_reminder_due: bool,
+    /// Didacticiel de prise en main déjà parcouru (ou passé).
+    pub onboarding_done: bool,
 }
 
 /// Contenu d'un export, que l'UI enregistre via le sélecteur de fichiers.

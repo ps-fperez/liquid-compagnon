@@ -191,10 +191,10 @@ fn ProjectionView(
             </div>
             {move || {
                 let Some(selected) = find(scenario.get()) else {
-                    return view! { <EmptyState title="Aucun compte" body="Ajoutez des comptes pour voir leur projection." /> }.into_any();
+                    return view! { <EmptyState title="Aucun compte" body="Ajoutez des comptes pour voir leur projection." action="Ajouter un compte" href="/comptes?nouveau=1" /> }.into_any();
                 };
                 if selected.accounts.is_empty() {
-                    return view! { <Card><EmptyState title="Aucun compte" body="Ajoutez des comptes pour voir leur projection." /></Card> }.into_any();
+                    return view! { <EmptyState title="Aucun compte" body="Ajoutez des comptes pour voir leur projection." action="Ajouter un compte" href="/comptes?nouveau=1" /> }.into_any();
                 }
                 let months = horizon.get();
                 view! {

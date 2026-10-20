@@ -42,3 +42,14 @@ L'application SHALL calculer la capacité d'épargne mensuelle comme : salaire a
 #### Scenario: Capacité négative
 - **WHEN** les charges et dépenses dépassent le salaire
 - **THEN** la capacité d'épargne négative est affichée en couleur « perte » avec un avertissement
+
+### Requirement: Libellés suggérés
+La saisie d'une dépense SHALL proposer les libellés déjà utilisés, du plus fréquent au moins fréquent, chacun avec la catégorie de sa dernière utilisation. Toucher une suggestion MUST reprendre son libellé et sa catégorie ; pour une nouvelle dépense, elle MUST être enregistrée aussitôt.
+
+#### Scenario: Dépense habituelle
+- **WHEN** l'utilisateur a déjà saisi « Courses » en Alimentation, puis saisit 10 € et touche la suggestion « Courses »
+- **THEN** une dépense « Courses » de 10 € est enregistrée en Alimentation
+
+#### Scenario: Libellé en cours de frappe
+- **WHEN** l'utilisateur tape « cou » dans le libellé
+- **THEN** « Courses » est proposé (sans distinction de casse ni d'accents)

@@ -52,3 +52,21 @@ L'application SHALL proposer un bouton dans l'en-tête masquant tous les montant
 #### Scenario: Consultation en public
 - **WHEN** l'utilisateur active le mode discret
 - **THEN** aucun montant n'est lisible sur l'ensemble des écrans
+
+### Requirement: Didacticiel de prise en main
+Après la création du code PIN, l'application SHALL présenter un didacticiel de cinq écrans (comptes, saisie rapide, projection, confidentialité), que l'utilisateur peut passer à tout moment et revoir depuis les réglages. Il MUST ne s'afficher qu'une fois.
+
+#### Scenario: Premier lancement
+- **WHEN** l'utilisateur vient de créer son code PIN
+- **THEN** le didacticiel s'affiche ; son dernier écran propose d'ajouter un premier compte
+
+#### Scenario: Didacticiel déjà vu
+- **WHEN** l'utilisateur déverrouille l'application après avoir parcouru ou passé le didacticiel
+- **THEN** l'accueil s'affiche directement
+
+### Requirement: États vides actionnables
+Une liste vide (comptes, positions, fonds, salaire, charges, dépenses) SHALL être présentée comme une zone d'ajout : la toucher MUST ouvrir directement la saisie correspondante, sans renvoyer vers un autre bouton.
+
+#### Scenario: PEA sans position
+- **WHEN** l'utilisateur ouvre un PEA sans position et touche la carte « Aucune position »
+- **THEN** la saisie d'une nouvelle position s'ouvre
