@@ -13,7 +13,7 @@
 - [x] 2.4 Commande Tauri `ping` appelée depuis l'UI ; vérifier le fonctionnement sur le PC avec le smoke test `scripts/smoke.ps1` (app de bureau, assets embarqués, fenêtre 412 × 892)
 - [x] 2.5 Configurer les profils release (`opt-level="z"`, `lto`, `wasm-opt`), `rustfmt.toml`, clippy, `.gitignore`, et un script de vérification (`fmt` + `clippy -D warnings` + `test`)
 - [x] 2.7 Pipeline GitHub Actions : qualité (fmt, clippy, tests) puis APK arm64 publié en release « dernier-build » (main) et X.Y.Z (tags)
-- [ ] 2.6 Générer un premier APK signé (`cargo tauri android build --apk`, keystore hors dépôt documentée dans le README), le transférer par le canal retenu en 1.3 et l'installer sur le téléphone
+- [x] 2.6 Générer un premier APK signé (`cargo tauri android build --apk`, keystore hors dépôt documentée dans le README), le transférer par le canal retenu en 1.3 et l'installer sur le téléphone
 
 ## 3. Domaine — fondations
 
@@ -85,7 +85,7 @@
 
 ## 10. Vérification et livraison
 
-- [ ] 10.1 Parcourir chaque scénario des specs sur le téléphone (checklist dans `docs/recette-v1.md`), corriger les écarts
+- [x] 10.1 Parcourir chaque scénario des specs sur le téléphone (checklist dans `docs/recette-v1.md`), corriger les écarts
 - [x] 10.2 Tests hors ligne (mode avion), quota API atteint, clé absente, import invalide
 - [x] 10.3 Vérifier `openspec validate liquid-compagnon-v1`, `cargo clippy -D warnings`, `cargo test --workspace` au vert
-- [ ] 10.4 Build APK release signé, installation sur le téléphone, README (build, installation, sauvegarde)
+- [x] 10.4 Build APK release signé, installation sur le téléphone, README (build, installation, sauvegarde)
