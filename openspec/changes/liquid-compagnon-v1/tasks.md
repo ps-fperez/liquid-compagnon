@@ -65,11 +65,11 @@
 
 ## 8. UI — fondations et thème
 
-- [ ] 8.1 Design tokens Tailwind (`@theme` : couleurs, `shadow-glow-*`, `animate-glow-pulse`, `prefers-reduced-motion`), police, fond sombre forcé
-- [ ] 8.2 Module `ui::api` typé (wrapper `invoke` par commande) et module `ui::format` (montants FR, dates JJ/MM/AAAA, saisie virgule/point)
-- [ ] 8.3 Composants de base : `AmountInput` (clavier décimal), `Card`, `GlowCard`, `Badge` provenance, `BottomSheet`, `ListRow`, cibles ≥ 44 px
-- [ ] 8.4 Shell : routeur, barre de navigation inférieure (onglet actif avec glow, bouton « + » central pulsant), en-tête avec réglages et mode discret, gestion du bouton retour Android
-- [ ] 8.5 Graphiques SVG en Rust : barre de répartition, courbe d'évolution, courbes de projection (neutre mise en avant)
+- [x] 8.1 Design tokens Tailwind (`@theme` : couleurs, `shadow-glow-*`, `animate-glow-pulse`, `prefers-reduced-motion`), police, fond sombre forcé
+- [x] 8.2 Module `ui::api` typé (wrapper `invoke` par commande) et module `ui::format` (montants FR, dates JJ/MM/AAAA, saisie virgule/point)
+- [x] 8.3 Composants de base : `AmountInput` (clavier décimal), `Card`, `GlowCard`, `Badge` provenance, `BottomSheet`, `ListRow`, cibles ≥ 44 px
+- [x] 8.4 Shell : routeur, barre de navigation inférieure (onglet actif avec glow, bouton « + » central pulsant), en-tête avec réglages et mode discret, gestion du bouton retour Android
+- [x] 8.5 Graphiques SVG en Rust : barre de répartition, courbe d'évolution, courbes de projection (neutre mise en avant)
 
 ## 9. UI — écrans
 

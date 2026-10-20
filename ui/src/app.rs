@@ -1,36 +1,39 @@
 use leptos::prelude::*;
-use leptos::task::spawn_local;
+use leptos_router::components::{Route, Router, Routes};
+use leptos_router::path;
 
+use crate::pages::{
+    AccountDetailPage, AccountsPage, BudgetPage, DashboardPage, Gallery, NotFound, ProjectionPage,
+    SettingsPage,
+};
+use crate::shell::{BottomNav, Header, SessionGate};
+use crate::state::{Privacy, Session, watch_visibility};
+
+/// Racine : contextes globaux, porte de session, coque et routes (une route par écran pour que
+/// le bouton retour d'Android remonte dans l'historique).
 #[component]
 pub fn App() -> impl IntoView {
-    let backend_status = RwSignal::new(String::from("Connexion au backend…"));
-
-    spawn_local(async move {
-        let status = match crate::api::ping().await {
-            Ok(response) => format!("Backend connecté · v{}", response.backend_version),
-            Err(error) => format!("Backend injoignable : {error}"),
-        };
-        backend_status.set(status);
-    });
+    Session::provide();
+    Privacy::provide();
+    watch_visibility();
 
     view! {
-        <main class="mx-auto flex min-h-dvh max-w-md flex-col gap-6 px-4 py-8">
-            <header class="flex items-center gap-3">
-                <div class="flex size-9 items-center justify-center rounded-xl bg-primary font-semibold text-bg">
-                    "LC"
-                </div>
-                <h1 class="text-lg font-medium">"Liquid Compagnon"</h1>
-            </header>
-
-            <section class="rounded-2xl border border-primary-strong bg-linear-to-br from-surface-raised to-surface p-5 shadow-glow-primary">
-                <p class="text-sm text-muted">"Patrimoine total"</p>
-                <p class="mt-1 text-3xl font-semibold tracking-tight">"— €"</p>
-                <p class="mt-3 text-sm text-secondary-light">{move || backend_status.get()}</p>
-            </section>
-
-            <button class="mx-auto flex size-14 items-center justify-center rounded-full bg-secondary text-2xl text-ink animate-glow-pulse">
-                "+"
-            </button>
-        </main>
+        <Router>
+            <SessionGate>
+                <Header />
+                <main class="mx-auto flex max-w-md flex-col gap-4 px-4 pt-2 pb-32">
+                    <Routes fallback=|| view! { <NotFound /> }>
+                        <Route path=path!("/") view=DashboardPage />
+                        <Route path=path!("/comptes") view=AccountsPage />
+                        <Route path=path!("/comptes/:id") view=AccountDetailPage />
+                        <Route path=path!("/budget") view=BudgetPage />
+                        <Route path=path!("/projection") view=ProjectionPage />
+                        <Route path=path!("/reglages") view=SettingsPage />
+                        <Route path=path!("/galerie") view=Gallery />
+                    </Routes>
+                </main>
+                <BottomNav />
+            </SessionGate>
+        </Router>
     }
 }

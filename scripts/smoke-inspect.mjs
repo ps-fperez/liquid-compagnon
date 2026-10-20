@@ -1,7 +1,7 @@
 // Smoke test : se connecte à la WebView de l'app (protocole DevTools) et vérifie que l'UI a démarré
 // sans erreur. Code de sortie 1 en cas d'échec.
 // Usage : node scripts/smoke-inspect.mjs <port> <texte attendu>
-const [port = "9222", expected = "Backend connecté"] = process.argv.slice(2);
+const [port = "9222", expected = "Liquid Compagnon"] = process.argv.slice(2);
 
 const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
 const page = targets.find((t) => t.type === "page");

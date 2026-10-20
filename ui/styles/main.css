@@ -4,6 +4,8 @@
 
 /* Thème "Purple Electro" — sombre uniquement */
 @theme {
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
   --color-primary: #a855f7;
   --color-primary-strong: #7c3aed;
   --color-primary-soft: #c084fc;
@@ -12,17 +14,25 @@
   --color-bg: #0b0614;
   --color-surface: #160e26;
   --color-surface-raised: #1f1535;
+  --color-line: #2c2047;
   --color-ink: #f5f3ff;
   --color-muted: #a7a3c2;
   --color-gain: #34d399;
   --color-loss: #f87171;
 
+  /* Glow : réservé aux éléments clés (carte patrimoine, bouton +, onglet actif, courbe neutre,
+     champ actif, flash de cours). */
   --shadow-glow-primary: 0 0 24px -4px rgb(168 85 247 / 0.55);
   --shadow-glow-secondary: 0 0 20px -2px rgb(59 130 246 / 0.6);
   --shadow-glow-gain: 0 0 14px -2px rgb(52 211 153 / 0.5);
   --shadow-glow-loss: 0 0 14px -2px rgb(248 113 113 / 0.5);
+  --shadow-glow-focus: 0 0 0 1px rgb(168 85 247 / 0.9), 0 0 16px -2px rgb(168 85 247 / 0.6);
 
   --animate-glow-pulse: glow-pulse 2.4s ease-in-out infinite;
+  --animate-flash-gain: flash-gain 0.9s ease-out 1;
+  --animate-flash-loss: flash-loss 0.9s ease-out 1;
+  --animate-sheet-up: sheet-up 0.22s ease-out 1;
+  --animate-fade-in: fade-in 0.18s ease-out 1;
 
   @keyframes glow-pulse {
     0%,
@@ -33,18 +43,71 @@
       box-shadow: 0 0 28px 0 rgb(59 130 246 / 0.75);
     }
   }
+
+  @keyframes flash-gain {
+    0% {
+      box-shadow: 0 0 18px 0 rgb(52 211 153 / 0.7);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgb(52 211 153 / 0);
+    }
+  }
+
+  @keyframes flash-loss {
+    0% {
+      box-shadow: 0 0 18px 0 rgb(248 113 113 / 0.7);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgb(248 113 113 / 0);
+    }
+  }
+
+  @keyframes sheet-up {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
 }
 
 @layer base {
   html {
     color-scheme: dark;
+    background-color: var(--color-bg);
     -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
     min-height: 100dvh;
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
-      env(safe-area-inset-left);
+    background-color: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    overscroll-behavior-y: none;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  /* Graphiques : la courbe mise en avant brille, les autres restent sobres. */
+  .chart-glow {
+    filter: drop-shadow(0 0 5px rgb(168 85 247 / 0.75));
   }
 }
 

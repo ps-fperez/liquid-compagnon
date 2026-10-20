@@ -2,6 +2,13 @@
 
 mod api;
 mod app;
+mod charts;
+mod components;
+mod format;
+mod icons;
+mod pages;
+mod shell;
+mod state;
 
 fn main() {
     console_error_panic_hook::set_once();
