@@ -56,12 +56,12 @@
 
 ## 7. Présentation Tauri (src-tauri)
 
-- [ ] 7.1 DTO dans `shared-dto` (dashboard, comptes, positions, budget, projection, réglages) et mappers domaine → DTO dans `src-tauri`
-- [ ] 7.2 Composition root : instanciation des adaptateurs, injection `Arc<dyn Port>` dans les use cases, état Tauri managé
-- [ ] 7.3 Commandes Tauri pour tous les use cases (appels DB en `spawn_blocking`), erreurs mappées en messages utilisateur français
-- [ ] 7.4 Garde de verrouillage côté backend : refus des commandes métier tant que la session n'est pas déverrouillée ; verrouillage après 60 s en arrière-plan (événements de cycle de vie)
-- [ ] 7.5 Plugins `tauri-plugin-biometric`, `tauri-plugin-dialog`, `tauri-plugin-fs` + permissions (capabilities) minimales
-- [ ] 7.6 Android : `FLAG_SECURE` dans `MainActivity.kt`, `android:allowBackup="false"` et permission `INTERNET` uniquement dans le manifeste
+- [x] 7.1 DTO dans `shared-dto` (dashboard, comptes, positions, budget, projection, réglages) et mappers domaine → DTO dans `src-tauri`
+- [x] 7.2 Composition root : instanciation des adaptateurs, injection `Arc<dyn Port>` dans les use cases, état Tauri managé
+- [x] 7.3 Commandes Tauri pour tous les use cases (appels DB en `spawn_blocking`), erreurs mappées en messages utilisateur français
+- [x] 7.4 Garde de verrouillage côté backend : refus des commandes métier tant que la session n'est pas déverrouillée ; verrouillage après 60 s en arrière-plan (événements de cycle de vie)
+- [x] 7.5 Plugins `tauri-plugin-biometric`, `tauri-plugin-dialog`, `tauri-plugin-fs` + permissions (capabilities) minimales
+- [x] 7.6 Android : `FLAG_SECURE` dans `MainActivity.kt`, `android:allowBackup="false"` et seule la permission `INTERNET` déclarée par l'application (les plugins ajoutent les leurs, ex. `USE_BIOMETRIC`)
 
 ## 8. UI — fondations et thème
 

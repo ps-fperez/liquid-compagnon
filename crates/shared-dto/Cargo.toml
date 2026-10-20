@@ -8,9 +8,13 @@ publish.workspace = true
 
 [dependencies]
 serde.workspace = true
+# Montants en décimal exact, sérialisés en chaînes (« 10640.25 ») ; compile aussi en WebAssembly.
+rust_decimal = { workspace = true, features = ["serde-str"] }
+chrono = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
 serde_json.workspace = true
+rust_decimal_macros.workspace = true
 
 [lints]
 workspace = true

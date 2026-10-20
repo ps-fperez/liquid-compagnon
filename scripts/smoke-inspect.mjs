@@ -43,9 +43,25 @@ await send("Page.reload", { ignoreCache: true });
 await new Promise((resolve) => setTimeout(resolve, 4000));
 
 const evaluate = async (expression) =>
-  (await send("Runtime.evaluate", { expression, returnByValue: true })).result?.value;
+  (await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true })).result?.value;
 const body = (await evaluate("document.body.innerText")) ?? "";
+
+// Appels IPC réels, sans effet de bord : au démarrage la session est verrouillée et les
+// commandes métier doivent être refusées.
+const ipc = await evaluate(`(async () => {
+  const invoke = window.__TAURI__.core.invoke;
+  const status = await invoke("session_status");
+  let guard;
+  try { await invoke("get_dashboard", { input: { force_refresh: false } }); guard = "accepté"; }
+  catch (error) { guard = error && error.code; }
+  return { unlocked: status.unlocked, pinKnown: typeof status.pin_set === "boolean", guard };
+})()`);
 ws.close();
+
+console.log(`IPC : ${JSON.stringify(ipc)}`);
+if (!ipc || ipc.unlocked !== false || !ipc.pinKnown || ipc.guard !== "session_locked") {
+  errors.push("contrôle IPC : session non verrouillée au démarrage ou commande métier non protégée");
+}
 
 console.log(`URL : ${page.url}`);
 console.log(`Texte affiché :\n${body.trim() || "(vide)"}`);

@@ -290,7 +290,8 @@ impl BudgetUseCases {
 
     // --- Aides -----------------------------------------------------------------------------
 
-    fn current_month(&self) -> Month {
+    /// Mois en cours (fuseau de l'utilisateur).
+    pub fn current_month(&self) -> Month {
         Month::of(self.clock.today())
     }
 

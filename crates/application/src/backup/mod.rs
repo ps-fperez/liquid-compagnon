@@ -98,6 +98,10 @@ impl BackupUseCases {
         })
     }
 
+    pub fn last_export_at(&self) -> AppResult<Option<chrono::DateTime<chrono::Utc>>> {
+        Ok(self.settings.last_export_at()?)
+    }
+
     /// Vrai si des comptes existent et qu'aucun export n'a eu lieu depuis 30 jours.
     pub fn export_reminder_due(&self) -> AppResult<bool> {
         if self.accounts.list()?.is_empty() {

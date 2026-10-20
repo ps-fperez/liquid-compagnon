@@ -8,9 +8,28 @@ use lc_domain::account::{
 };
 use lc_domain::{AccountId, Color, Decimal, DomainError, FundId, Label, Money, Rate, defaults};
 
+use lc_domain::valuation::{AccountValuation, value_account};
+
 use crate::ports::{AccountRepository, Clock};
-use crate::pricing::PricingService;
+use crate::pricing::{PricingIssue, PricingService, tracked_assets};
 use crate::{AppError, AppResult};
+
+/// Comptes et leur valorisation, avec les éventuels problèmes de cours.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ValuedAccounts {
+    pub accounts: Vec<(Account, AccountValuation)>,
+    pub pricing_issues: Vec<PricingIssue>,
+}
+
+/// Actifs à coter pour valoriser ces comptes, archivés compris (la fiche d'un compte archivé
+/// reste consultable).
+fn tracked_assets_of_all(accounts: &[Account]) -> Vec<AssetRef> {
+    let mut unarchived = accounts.to_vec();
+    for account in &mut unarchived {
+        account.unarchive();
+    }
+    tracked_assets(&unarchived)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewAccount {
@@ -62,6 +81,42 @@ impl AccountUseCases {
 
     pub fn get_account(&self, id: AccountId) -> AppResult<Account> {
         self.repo.get(id)?.ok_or(AppError::NotFound("Compte"))
+    }
+
+    /// Comptes valorisés avec les cours disponibles (cache de 5 minutes respecté).
+    pub async fn valued_accounts(&self, include_archived: bool) -> AppResult<ValuedAccounts> {
+        let accounts = self.list_accounts(include_archived)?;
+        let refresh = self
+            .pricing
+            .prices_for(&tracked_assets_of_all(&accounts), false)
+            .await?;
+        Ok(ValuedAccounts {
+            accounts: accounts
+                .into_iter()
+                .map(|account| {
+                    let valuation = value_account(&account, &refresh.prices);
+                    (account, valuation)
+                })
+                .collect(),
+            pricing_issues: refresh.issues,
+        })
+    }
+
+    /// Un compte et sa valorisation détaillée (positions, fonds).
+    pub async fn valued_account(
+        &self,
+        id: AccountId,
+    ) -> AppResult<(Account, AccountValuation, Vec<PricingIssue>)> {
+        let account = self.get_account(id)?;
+        let refresh = self
+            .pricing
+            .prices_for(
+                &tracked_assets_of_all(std::slice::from_ref(&account)),
+                false,
+            )
+            .await?;
+        let valuation = value_account(&account, &refresh.prices);
+        Ok((account, valuation, refresh.issues))
     }
 
     pub fn create_account(&self, input: NewAccount) -> AppResult<AccountId> {
@@ -295,6 +350,55 @@ mod tests {
         assert_eq!(
             value_account(&pea, &PriceBook::default()).value,
             Money::ZERO
+        );
+    }
+
+    #[test]
+    fn valued_accounts_include_positions_at_market_price() {
+        let env = TestEnv::new();
+        env.coingecko.set_price("bitcoin", dec!(60000));
+        let accounts = env.accounts();
+        let wallet = accounts
+            .create_account(new_account("Crypto", AccountType::Crypto))
+            .unwrap();
+        accounts
+            .upsert_position(
+                wallet,
+                asset(QuoteSource::CoinGecko, "bitcoin"),
+                dec!(0.15),
+                None,
+            )
+            .unwrap();
+        let closed = accounts
+            .create_account(new_account("Ancien", AccountType::Crypto))
+            .unwrap();
+        accounts
+            .upsert_position(
+                closed,
+                asset(QuoteSource::CoinGecko, "bitcoin"),
+                dec!(1),
+                None,
+            )
+            .unwrap();
+        accounts.archive_account(closed).unwrap();
+
+        let all = block_on(accounts.valued_accounts(true)).unwrap();
+        let (_, detail, issues) = block_on(accounts.valued_account(closed)).unwrap();
+
+        assert_eq!(all.accounts.len(), 2);
+        assert_eq!(all.accounts[0].1.value, Money::new(dec!(9000)));
+        assert_eq!(
+            detail.value,
+            Money::new(dec!(60000)),
+            "un compte archivé reste valorisé dans sa fiche"
+        );
+        assert!(issues.is_empty());
+        assert_eq!(
+            block_on(accounts.valued_accounts(false))
+                .unwrap()
+                .accounts
+                .len(),
+            1
         );
     }
 

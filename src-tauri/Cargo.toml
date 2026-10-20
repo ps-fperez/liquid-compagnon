@@ -23,6 +23,17 @@ serde_json.workspace = true
 log = "0.4"
 tauri = { version = "2.12.4", features = [] }
 tauri-plugin-log = "2"
+# Sélecteur de fichiers et accès aux fichiers choisis (export / import JSON)
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+
+[dev-dependencies]
+rust_decimal.workspace = true
+rust_decimal_macros.workspace = true
+
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+# Empreinte / reconnaissance faciale (BiometricPrompt sur Android)
+tauri-plugin-biometric = "2"
 
 [lints]
 workspace = true

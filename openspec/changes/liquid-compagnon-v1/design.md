@@ -113,9 +113,9 @@ Les taux réglementés et plafonds par défaut (Livret A 22 950 €, LDDS 12 000
 
 ### D9 — Sécurité
 - PIN : `argon2` (Argon2id, sel aléatoire), stocké dans `settings`. Compteur d'échecs + délai exponentiel persistés (résiste au redémarrage).
-- Biométrie : plugin officiel `tauri-plugin-biometric` (Android BiometricPrompt).
-- Verrouillage après 60 s en arrière-plan : événement de cycle de vie Tauri (`RunEvent::Resumed` / pause) + horodatage.
-- `FLAG_SECURE` et `android:allowBackup="false"` : modifications du projet Android généré (`src-tauri/gen/android`), `MainActivity.kt` et `AndroidManifest.xml`, versionnés.
+- Biométrie : plugin officiel `tauri-plugin-biometric` (Android BiometricPrompt), appelé **par le backend** (commande `unlock_with_biometric`) : l'UI ne peut jamais ouvrir la session d'elle-même.
+- Session tenue côté Rust (`src-tauri/src/session.rs`) : l'application démarre verrouillée, toute commande métier est refusée (`session_locked`) tant que le PIN ou la biométrie n'a pas été validé. Verrouillage après 60 s en arrière-plan, détecté par deux voies redondantes : `WindowEvent::Focused` côté Tauri et les commandes `notify_hidden` / `notify_visible` appelées par l'UI sur `visibilitychange` (l'UI peut seulement provoquer un verrouillage, jamais un déverrouillage). Un événement `session-locked` prévient l'UI.
+- `FLAG_SECURE`, `android:allowBackup="false"` et `dataExtractionRules` (ni sauvegarde cloud ni transfert d'appareil sous Android 12+) : modifications du projet Android généré (`src-tauri/gen/android`), `MainActivity.kt` et `AndroidManifest.xml`, versionnés.
 - Clé Twelve Data : en clair dans `settings` (base privée de l'app, non sauvegardée) ; exclue de l'export.
 
 ### D10 — UI Leptos
