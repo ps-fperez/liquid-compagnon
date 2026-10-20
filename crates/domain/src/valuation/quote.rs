@@ -52,6 +52,11 @@ impl Quote {
         self.freshness
     }
 
+    /// Le même cours, requalifié (ex. un cours relu du cache est `Cached`).
+    pub fn with_freshness(self, freshness: QuoteFreshness) -> Self {
+        Self { freshness, ..self }
+    }
+
     fn provenance(&self) -> Provenance {
         match self.freshness {
             QuoteFreshness::Live => Provenance::Live,

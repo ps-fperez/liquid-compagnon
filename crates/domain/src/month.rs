@@ -78,6 +78,19 @@ impl fmt::Display for Month {
     }
 }
 
+impl std::str::FromStr for Month {
+    type Err = DomainError;
+
+    /// Lit un mois au format ISO `AAAA-MM`.
+    fn from_str(raw: &str) -> Result<Self, Self::Err> {
+        let invalid = || DomainError::InvalidMonth { year: 0, month: 0 };
+        let (year, month) = raw.trim().split_once('-').ok_or_else(invalid)?;
+        let year = year.parse().map_err(|_| invalid())?;
+        let month = month.parse().map_err(|_| invalid())?;
+        Month::new(year, month)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,6 +139,13 @@ mod tests {
     #[test]
     fn displays_as_iso_year_month() {
         assert_eq!(month(2026, 3).to_string(), "2026-03");
+    }
+
+    #[test]
+    fn parses_iso_year_month() {
+        assert_eq!("2026-03".parse::<Month>(), Ok(month(2026, 3)));
+        assert!("2026-13".parse::<Month>().is_err());
+        assert!("mars 2026".parse::<Month>().is_err());
     }
 
     proptest! {

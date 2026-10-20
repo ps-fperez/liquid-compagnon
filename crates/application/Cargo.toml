@@ -9,6 +9,16 @@ publish.workspace = true
 [dependencies]
 lc-domain.workspace = true
 thiserror.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+rust_decimal = { workspace = true, features = ["serde-str"] }
+chrono = { workspace = true, features = ["serde"] }
+uuid = { workspace = true, features = ["serde"] }
+
+[dev-dependencies]
+serde_json.workspace = true
+pollster.workspace = true
+rust_decimal_macros.workspace = true
 
 [lints]
 workspace = true

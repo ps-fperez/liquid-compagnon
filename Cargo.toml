@@ -33,8 +33,12 @@ rust_decimal_macros = "1"
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 uuid = { version = "1", features = ["v4"] }
 
+# Application : ports asynchrones (fournisseurs de cours)
+async-trait = "0.1"
+
 # Tests
 proptest = "1"
+pollster = "0.4"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -34,21 +34,21 @@
 
 ## 5. Application — ports et cas d'usage
 
-- [ ] 5.1 Définir les ports (D4) : `AccountRepository`, `BudgetRepository`, `SnapshotRepository`, `PriceCache`, `PriceProvider`, `SecretStore`, `BackupCodec`, `Clock` + fakes en mémoire pour les tests
-- [ ] 5.2 Cas d'usage sécurité : `SetupPin`, `Unlock` (compteur d'échecs, délai exponentiel à partir de 30 s), `ChangePin` + tests
-- [ ] 5.3 Cas d'usage budget : `AddSalary`, `AddOneOffIncome`, `UpsertRecurringCharge`, `AddExpense`, `ListExpenses` (mois, catégorie, total), `ManageCategories` (archivage si utilisée) + tests
-- [ ] 5.4 Cas d'usage comptes : `CreateAccount`, `UpdateAccount`, `UpdateSavingsBalance`, `UpsertPosition`, `UpsertPeiFund`, `RecordPeiNav` (capture du cours de référence), archivage + tests
-- [ ] 5.5 `PricingService` : routage par provider, TTL 5 min, repli cache, gestion 429, provenance ; `RefreshPrices` et `SearchAsset` + tests
-- [ ] 5.6 `GetDashboard` (total, répartition %, variation vs dernier snapshot, indicateurs budgétaires) et `TakeSnapshotIfDue` + tests
-- [ ] 5.7 `GetProjection` et `UpdateScenarioRates` + tests
-- [ ] 5.8 `FullDataset` versionné, `ExportData` (sans hash PIN ni clé API) et `ImportData` (validation complète avant écriture, refus des versions futures, chaîne de migrations) + tests
+- [x] 5.1 Définir les ports (D4) : `AccountRepository`, `BudgetRepository`, `SnapshotRepository`, `PriceCache`, `PriceProvider`, `SecretStore`, `BackupCodec`, `Clock` + fakes en mémoire pour les tests
+- [x] 5.2 Cas d'usage sécurité : `SetupPin`, `Unlock` (compteur d'échecs, délai exponentiel à partir de 30 s), `ChangePin` + tests
+- [x] 5.3 Cas d'usage budget : `AddSalary`, `AddOneOffIncome`, `UpsertRecurringCharge`, `AddExpense`, `ListExpenses` (mois, catégorie, total), `ManageCategories` (archivage si utilisée) + tests
+- [x] 5.4 Cas d'usage comptes : `CreateAccount`, `UpdateAccount`, `UpdateSavingsBalance`, `UpsertPosition`, `UpsertPeiFund`, `RecordPeiNav` (capture du cours de référence), archivage + tests
+- [x] 5.5 `PricingService` : routage par provider, TTL 5 min, repli cache, gestion 429, provenance ; `RefreshPrices` et `SearchAsset` + tests
+- [x] 5.6 `GetDashboard` (total, répartition %, variation vs dernier snapshot, indicateurs budgétaires) et `TakeSnapshotIfDue` + tests
+- [x] 5.7 `GetProjection` et `UpdateScenarioRates` + tests
+- [x] 5.8 `FullDataset` versionné, `ExportData` (sans hash PIN ni clé API) et `ImportData` (validation complète avant écriture, refus des versions futures, chaîne de migrations) + tests
 
 ## 6. Infrastructure
 
 - [ ] 6.1 Connexion SQLite (`rusqlite` bundled) + migration initiale de toutes les tables (D6) via `rusqlite_migration` + test de migration sur `:memory:`
 - [ ] 6.2 `SqliteAccountRepository` (comptes, détails livrets, positions, fonds PEI, ancrages) + tests d'intégration
 - [ ] 6.3 `SqliteBudgetRepository` (salaires, revenus ponctuels, charges, dépenses, catégories par défaut au premier lancement) + tests d'intégration
-- [ ] 6.4 `SqliteSnapshotRepository`, `SqlitePriceCache`, `SqliteSecretStore` (Argon2id) + tests d'intégration
+- [ ] 6.4 `SqliteSnapshotRepository`, `SqlitePriceCache`, `SqliteSettingsStore`, `Argon2PinHasher` (Argon2id) + tests d'intégration
 - [ ] 6.5 `CoinGeckoProvider` (`/simple/price` groupé, `/search`) avec `reqwest` rustls + tests `wiremock`
 - [ ] 6.6 `TwelveDataProvider` (`/price` batch, `/symbol_search`, `/exchange_rate` → EUR, espacement des requêtes, 429) + tests `wiremock`
 - [ ] 6.7 `JsonBackupCodec` (serde_json, `schema_version`) + tests aller-retour export → import

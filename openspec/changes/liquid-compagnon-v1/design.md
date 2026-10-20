@@ -64,20 +64,30 @@ L'enum `AccountKind` (plutôt qu'un trait objet par type) est un choix délibér
 
 ### D4 — Ports (application) — interfaces petites (ISP)
 ```rust
-pub trait AccountRepository   { fn list(&self) -> Result<Vec<Account>>; fn get(..); fn save(..); fn archive(..); }
-pub trait BudgetRepository    { /* salaires, revenus ponctuels, charges, dépenses, catégories */ }
-pub trait SnapshotRepository  { fn for_month(..); fn save(..); fn list(..); }
+pub trait AccountRepository   { fn list(&self); fn get(&self, id); fn save(&self, account); }
+pub trait BudgetRepository    { /* catégories, salaires, revenus ponctuels, charges, dépenses : liste, save, delete */ }
+pub trait SnapshotRepository  { fn list(&self); fn save(&self, snapshot); }
 pub trait PriceCache          { fn get(&self, a: &AssetRef) -> Option<Quote>; fn put(&self, q: &Quote); }
-#[async_trait] pub trait PriceProvider { fn supports(&self, a: &AssetRef) -> bool; async fn quotes(&self, a: &[AssetRef]) -> Result<Vec<Quote>, PriceError>; async fn search(&self, q: &str) -> Result<Vec<AssetRef>, PriceError>; }
-pub trait SecretStore         { fn pin_hash(..); fn set_pin_hash(..); fn api_key(..); fn set_api_key(..); }
-pub trait BackupCodec         { fn export(&self, data: &FullDataset) -> Result<Vec<u8>>; fn import(&self, bytes: &[u8]) -> Result<FullDataset>; }
-pub trait Clock               { fn now(&self) -> DateTime<Utc>; }
+#[async_trait] pub trait PriceProvider { fn source(&self) -> QuoteSource; async fn quotes(&self, a: &[AssetRef]) -> Result<Vec<Quote>, PriceError>; async fn search(&self, q: &str) -> Result<Vec<AssetRef>, PriceError>; }
+pub trait PinHasher           { fn hash(&self, pin); fn verify(&self, pin, hash) -> bool; }   // Argon2id
+pub trait SettingsStore       { /* hash du PIN, compteur d'échecs, biométrie, clé Twelve Data, date du dernier export */ }
+pub trait BackupCodec         { fn encode(&self, data: &FullDataset); fn decode(&self, bytes) -> Result<FullDataset, BackupError>; }
+pub trait DatasetStore        { fn replace_all(&self, data: &Dataset); }   // import en une transaction
+pub trait Clock               { fn now(&self) -> DateTime<Utc>; fn today(&self) -> NaiveDate; }
 ```
-`Quote { asset, price_eur: Money, as_of, source: Live | Cached }`. Un `PricingService` (application) compose plusieurs `PriceProvider` + `PriceCache` : il route chaque actif vers le provider qui le `supports`, applique le TTL de 5 min et le repli sur le cache — c'est lui qui implémente « en direct / en cache / estimée / manuelle ».
+`Quote { asset, price (EUR), as_of, freshness: Live | Cached }`. Un `PricingService` (application) compose plusieurs `PriceProvider` + `PriceCache` : il route chaque actif vers le provider de sa `source`, applique le TTL de 5 min et le repli sur le cache. La provenance affichée (« en direct / en cache / estimée / saisie manuelle / prix de revient ») est calculée par le domaine (`valuation::Provenance`).
 
-### D5 — Cas d'usage (un fichier, une responsabilité — SRP)
-`SetupPin`, `Unlock`, `ChangePin`, `GetDashboard`, `RefreshPrices`, `TakeSnapshotIfDue`, `CreateAccount`, `UpdateAccount`, `UpdateSavingsBalance`, `UpsertPosition`, `UpsertPeiFund`, `RecordPeiNav`, `SearchAsset`, `AddSalary`, `AddOneOffIncome`, `UpsertRecurringCharge`, `AddExpense`, `ListExpenses`, `ManageCategories`, `GetProjection`, `UpdateScenarioRates`, `ExportData`, `ImportData`.
-Chaque use case est une struct générique sur ses ports (`GetDashboard<A: AccountRepository, P: …>`) ou prend des `Arc<dyn Port>` ; choix retenu : **`Arc<dyn Port>`** pour simplifier la composition dans `src-tauri` (le coût du dispatch dynamique est négligeable ici).
+### D5 — Cas d'usage regroupés par domaine fonctionnel (SRP par méthode)
+Une struct par domaine fonctionnel, une méthode par cas d'usage, dépendances injectées en `Arc<dyn Port>` :
+- `SecurityUseCases` : `setup_pin`, `unlock` (5 essais puis blocage 30 s doublé), `change_pin`, biométrie, clé API.
+- `BudgetUseCases` : catégories (création, renommage, archivage, suppression si inutilisée), salaires, revenus ponctuels, charges, dépenses, `summary`.
+- `AccountUseCases` : création, modification, archivage, soldes, conditions des livrets, rendements de scénarios, positions, fonds PEI (ancrage avec le cours de référence du jour), recherche d'actifs.
+- `PricingService` : cours groupés par source, cache, repli hors ligne, problèmes signalés (`PricingIssue`).
+- `DashboardUseCases` : tableau de bord (+ snapshot automatique du mois), snapshot manuel.
+- `ProjectionUseCases` : projection 12 mois sur 3 scénarios, alerte de versements excessifs.
+- `BackupUseCases` : export (`FullDataset` v1, sans secrets), import validé, rappel d'export à 30 jours.
+
+*Écart assumé par rapport à « une struct par cas d'usage »* : ~25 structs quasi vides n'apportaient que du boilerplate ; le regroupement garde une responsabilité par méthode, des dépendances explicites et testables (fakes en mémoire dans `application::testing`).
 
 ### D6 — Persistance : rusqlite + migrations embarquées
 `rusqlite` (feature `bundled`, donc pas de dépendance au SQLite système Android) + `rusqlite_migration` avec migrations SQL versionnées dans `infrastructure/migrations/`. Montants stockés en `TEXT` (représentation décimale exacte), dates en ISO 8601. Une `Connection` unique derrière un `Mutex`, appelée via `tauri::async_runtime::spawn_blocking`.
