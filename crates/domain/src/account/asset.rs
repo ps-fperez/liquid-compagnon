@@ -66,7 +66,13 @@ impl AssetRef {
         }
         let symbol = match source {
             QuoteSource::CoinGecko => symbol.to_ascii_lowercase(),
-            QuoteSource::TwelveData => symbol.to_ascii_uppercase(),
+            // `TICKER` ou `TICKER:PLACE` (ex. `CW8:Euronext`) : seul le ticker est normalisé.
+            QuoteSource::TwelveData => match symbol.split_once(':') {
+                Some((ticker, exchange)) => {
+                    format!("{}:{}", ticker.trim().to_ascii_uppercase(), exchange.trim())
+                }
+                None => symbol.to_ascii_uppercase(),
+            },
         };
         let display_name = match display_name.trim() {
             "" => symbol.clone(),
@@ -121,6 +127,18 @@ mod tests {
         assert_eq!(btc.display_name(), "bitcoin");
         assert_eq!(cw8.symbol(), "CW8");
         assert_eq!(cw8.display_name(), "Amundi MSCI World");
+    }
+
+    #[test]
+    fn twelve_data_exchange_suffix_keeps_its_case() {
+        let cw8 = AssetRef::new(
+            QuoteSource::TwelveData,
+            "cw8:Euronext",
+            "",
+            CurrencyCode::eur(),
+        )
+        .unwrap();
+        assert_eq!(cw8.symbol(), "CW8:Euronext");
     }
 
     #[test]

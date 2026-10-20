@@ -45,14 +45,14 @@
 
 ## 6. Infrastructure
 
-- [ ] 6.1 Connexion SQLite (`rusqlite` bundled) + migration initiale de toutes les tables (D6) via `rusqlite_migration` + test de migration sur `:memory:`
-- [ ] 6.2 `SqliteAccountRepository` (comptes, détails livrets, positions, fonds PEI, ancrages) + tests d'intégration
-- [ ] 6.3 `SqliteBudgetRepository` (salaires, revenus ponctuels, charges, dépenses, catégories par défaut au premier lancement) + tests d'intégration
-- [ ] 6.4 `SqliteSnapshotRepository`, `SqlitePriceCache`, `SqliteSettingsStore`, `Argon2PinHasher` (Argon2id) + tests d'intégration
-- [ ] 6.5 `CoinGeckoProvider` (`/simple/price` groupé, `/search`) avec `reqwest` rustls + tests `wiremock`
-- [ ] 6.6 `TwelveDataProvider` (`/price` batch, `/symbol_search`, `/exchange_rate` → EUR, espacement des requêtes, 429) + tests `wiremock`
-- [ ] 6.7 `JsonBackupCodec` (serde_json, `schema_version`) + tests aller-retour export → import
-- [ ] 6.8 `SystemClock` et transaction d'import « tout remplacer » + test de non-modification en cas d'échec
+- [x] 6.1 Connexion SQLite (`rusqlite` bundled) + migration initiale de toutes les tables (D6) via `PRAGMA user_version` + test de migration sur `:memory:`
+- [x] 6.2 `SqliteAccountRepository` (comptes, détails livrets, positions, fonds PEI, ancrages) + tests d'intégration
+- [x] 6.3 `SqliteBudgetRepository` (salaires, revenus ponctuels, charges, dépenses, catégories par défaut au premier lancement) + tests d'intégration
+- [x] 6.4 `SqliteSnapshotRepository`, `SqlitePriceCache`, `SqliteSettingsStore`, `Argon2PinHasher` (Argon2id) + tests d'intégration
+- [x] 6.5 `CoinGeckoProvider` (`/simple/price` groupé, `/search`) avec `reqwest` rustls + tests `wiremock`
+- [x] 6.6 `TwelveDataProvider` (`/price` batch, `/symbol_search`, `/exchange_rate` → EUR, espacement des requêtes, 429) + tests `wiremock`
+- [x] 6.7 `JsonBackupCodec` (serde_json, `schema_version`) + tests aller-retour export → import
+- [x] 6.8 `SystemClock` et transaction d'import « tout remplacer » + test de non-modification en cas d'échec
 
 ## 7. Présentation Tauri (src-tauri)
 

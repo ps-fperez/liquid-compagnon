@@ -90,14 +90,14 @@ Une struct par domaine fonctionnel, une méthode par cas d'usage, dépendances i
 *Écart assumé par rapport à « une struct par cas d'usage »* : ~25 structs quasi vides n'apportaient que du boilerplate ; le regroupement garde une responsabilité par méthode, des dépendances explicites et testables (fakes en mémoire dans `application::testing`).
 
 ### D6 — Persistance : rusqlite + migrations embarquées
-`rusqlite` (feature `bundled`, donc pas de dépendance au SQLite système Android) + `rusqlite_migration` avec migrations SQL versionnées dans `infrastructure/migrations/`. Montants stockés en `TEXT` (représentation décimale exacte), dates en ISO 8601. Une `Connection` unique derrière un `Mutex`, appelée via `tauri::async_runtime::spawn_blocking`.
+`rusqlite` (feature `bundled`, donc pas de dépendance au SQLite système Android) + migrations SQL versionnées dans `infrastructure/migrations/`, appliquées au démarrage selon `PRAGMA user_version` (une transaction par migration ; une base créée par une version plus récente est refusée). Choix d'une vingtaine de lignes maison plutôt que `rusqlite_migration`, dont la version doit suivre celle de `rusqlite`. Clés étrangères activées : une dépense ne peut référencer une catégorie absente. Montants stockés en `TEXT` (représentation décimale exacte), dates en ISO 8601. Une `Connection` unique derrière un `Mutex`, appelée via `tauri::async_runtime::spawn_blocking`.
 Tables : `accounts`, `savings_details`, `positions`, `pei_funds`, `pei_nav_anchors`, `salaries`, `one_off_incomes`, `recurring_charges`, `expenses`, `categories`, `snapshots`, `snapshot_lines`, `price_cache`, `settings` (clé/valeur, dont hash PIN et clé API).
 *Alternatives* : `sqlx` (async, macros compile-time lourdes à configurer pour Android), JSON pur (pas de requêtes, risque de corruption à l'écriture), SQLCipher (complexité de build NDK — écarté par choix utilisateur).
 
 ### D7 — Valorisation et cours
 - **CoinGecko** : `GET /api/v3/simple/price?ids=…&vs_currencies=eur` (tous les actifs en une requête) et `/search` pour la recherche. Clé « demo » optionnelle si l'API publique devient restrictive.
-- **Twelve Data** : `/price` (batch via `symbol=A,B`), `/symbol_search`, `/exchange_rate` pour la conversion en EUR. Offre gratuite ~8 req/min, 800/jour → regroupement + TTL 5 min + file d'attente avec espacement.
-- Client HTTP : `reqwest` (rustls, pas d'OpenSSL à compiler pour Android) côté `src-tauri`/`infrastructure`. L'UI WASM ne fait **aucun** appel réseau.
+- **Twelve Data** : `/price` (batch via `symbol=A,B`), `/symbol_search`, `/exchange_rate` pour la conversion en EUR. Symboles au format `TICKER:PLACE` (ex. `CW8:Euronext`) issus de `/symbol_search`. Offre gratuite : 8 crédits/min (1 par symbole et par conversion de devise), 800/jour → requête groupée + TTL 5 min + compteur local de crédits : seuls les actifs que le quota permet sont demandés, les autres restent servis par le cache (pas d'erreur 429 provoquée).
+- Client HTTP : `reqwest` 0.12 avec `rustls-tls` (fournisseur `ring`, certificats racine `webpki-roots` embarqués) côté `infrastructure`. `reqwest` 0.13 a été écarté : son TLS par défaut impose `aws-lc` (C) et un vérificateur de plateforme qui exige une initialisation JNI sur Android. L'UI WASM ne fait **aucun** appel réseau.
 - **PEI** : `PeiEstimator::estimate(anchor, current_ref_price) = anchor.nav × current / anchor.reference_price`. À chaque `RecordPeiNav`, le cours de référence du jour est capturé et devient le nouvel ancrage.
 
 ### D8 — Projection
