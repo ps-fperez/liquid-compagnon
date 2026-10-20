@@ -12,7 +12,11 @@ pub fn QuickAddSheet(open: RwSignal<bool>) -> impl IntoView {
         let navigate = navigate.clone();
         move |_| {
             open.set(false);
-            navigate(target, Default::default());
+            // Identifiant unique : une nouvelle saisie rapide depuis le même écran rouvre le formulaire.
+            navigate(
+                &format!("{target}&n={}", js_sys::Date::now() as u64),
+                Default::default(),
+            );
         }
     };
     view! {

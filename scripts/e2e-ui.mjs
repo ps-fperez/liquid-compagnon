@@ -35,8 +35,12 @@ await send("Runtime.enable");
 await send("Log.enable");
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const evaluate = async (expression) =>
-  (await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true })).result?.value;
+/** Évalue une expression dans la page ; échoue au bout de 10 s plutôt que de bloquer le test. */
+const evaluate = async (expression) => {
+  const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error(`délai dépassé : ${expression.slice(0, 80)}`)), 10_000));
+  const result = await Promise.race([send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true }), timeout]);
+  return result.result?.value;
+};
 const bodyText = () => evaluate("document.body.innerText");
 
 let step = 0;
@@ -67,7 +71,8 @@ async function waitForText(text, timeout = 8000) {
 async function click(label) {
   const ok = await evaluate(`(() => {
     const label = ${JSON.stringify(label)};
-    const el = [...document.querySelectorAll("button, a")].find(e =>
+    const scope = document.querySelector('[role="dialog"]') ?? document;
+    const el = [...scope.querySelectorAll("button, a")].find(e =>
       !e.disabled && (e.getAttribute("aria-label") === label || e.textContent.trim() === label));
     if (!el) return false;
     el.click();
@@ -81,7 +86,8 @@ async function click(label) {
 async function fill(label, value) {
   const ok = await evaluate(`(() => {
     const label = ${JSON.stringify(label)};
-    const field = [...document.querySelectorAll("label")].find(l => l.querySelector("span")?.textContent.trim() === label);
+    const scope = document.querySelector('[role="dialog"]') ?? document;
+    const field = [...scope.querySelectorAll("label")].find(l => l.querySelector("span")?.textContent.trim() === label);
     const input = field?.querySelector("input");
     if (!input) return false;
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
@@ -123,14 +129,14 @@ console.log("4. Mise à jour du solde");
 await click("Mettre à jour le solde");
 await fill("Nouveau solde", "10640,25");
 await click("Enregistrer");
-await waitForText("10 640,25 €");
+await waitForText("10 640,25 €");
 await shot("livret-a");
 
 console.log("5. Tableau de bord alimenté");
 await click("Accueil");
 await waitForText("Livret A");
 const text = await bodyText();
-if (!text.includes("10 640,25 €")) await fail("le total du tableau de bord est incorrect");
+if (!text.includes("10 640,25 €")) await fail("le total du tableau de bord est incorrect");
 await shot("dashboard");
 
 console.log("6. Verrouillage, mauvais PIN, déverrouillage");
@@ -145,6 +151,59 @@ await shot("pin-incorrect");
 await typePin("1234");
 await click("Déverrouiller");
 await waitForText("Patrimoine total");
+
+console.log("7. Budget : salaire, dépense en saisie rapide, charge fixe");
+await click("Budget");
+await waitForText("Salaire net mensuel");
+await click("Nouveau salaire");
+await fill("Salaire net mensuel (net à payer)", "3200");
+await click("Enregistrer");
+await waitForText("3 200,00 €");
+await click("Saisie rapide");
+await click("Dépense");
+await waitForText("Nouvelle dépense");
+await fill("Montant", "42,50");
+await click("Alimentation"); // 3e interaction : la catégorie enregistre
+await waitForText("42,50 €");
+await click("Ajouter une charge fixe");
+await fill("Libellé", "Loyer");
+await fill("Montant", "1300");
+await click("Logement");
+await click("Enregistrer");
+await waitForText("Loyer");
+await waitForText("1 857,50 €"); // 3 200 − 1 300 − 42,50 (seul mois de dépenses)
+await shot("budget");
+
+console.log("8. Projection");
+await click("Projection");
+await waitForText("Capacité d'épargne mensuelle");
+await waitForText("Neutre");
+await shot("projection");
+
+console.log("9. PEA : espèces");
+await click("Comptes");
+await click("Nouveau");
+await click("PEA");
+await click("Créer le compte");
+await waitForText("Ajouter une position");
+await click("Modifier les espèces");
+await fill("Solde espèces", "500");
+await click("Enregistrer");
+await waitForText("500,00 €");
+await shot("pea");
+await click("Accueil");
+await waitForText("11 140,25 €");
+
+console.log("10. Réglages et sauvegarde");
+await click("Réglages");
+await waitForText("Exporter mes données");
+const plugins = await evaluate(
+  "typeof window.__TAURI__.dialog?.save + '/' + typeof window.__TAURI__.fs?.writeTextFile + '/' + typeof window.__TAURI__.fs?.readTextFile",
+);
+if (plugins !== "function/function/function") await fail(`plugins dialog/fs non exposés : ${plugins}`);
+const backup = await evaluate("window.__TAURI__.core.invoke('export_backup').then(b => b.content)");
+if (!backup?.includes('"schema_version"') || backup.includes("argon2")) await fail("export invalide ou contenant le PIN");
+await shot("reglages");
 
 ws.close();
 if (errors.length > 0) {

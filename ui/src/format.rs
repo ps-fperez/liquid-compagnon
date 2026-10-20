@@ -8,8 +8,11 @@ use std::str::FromStr;
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use rust_decimal::{Decimal, RoundingStrategy};
 
-/// Séparateur de milliers (espace fine insécable).
-const THOUSANDS: char = '\u{202F}';
+/// Séparateur de milliers : espace insécable (l'espace fine U+202F est quasi invisible dans
+/// certaines polices mobiles).
+const THOUSANDS: char = '\u{00A0}';
+/// Espace fine insécable, acceptée à la saisie.
+const NARROW_NBSP: char = '\u{202F}';
 /// Espace insécable avant une unité.
 const NBSP: char = '\u{00A0}';
 /// Signe moins typographique.
@@ -217,7 +220,7 @@ fn normalize_input(raw: &str) -> String {
     raw.trim()
         .trim_end_matches('€')
         .chars()
-        .filter(|c| !c.is_whitespace() && *c != THOUSANDS && *c != NBSP)
+        .filter(|c| !c.is_whitespace() && *c != THOUSANDS && *c != NARROW_NBSP && *c != NBSP)
         .map(|c| {
             if c == ',' {
                 '.'
@@ -270,7 +273,7 @@ mod tests {
 
     #[test]
     fn uses_non_breaking_spaces() {
-        assert_eq!(amount(dec!(1234)), "1\u{202F}234,00\u{00A0}€");
+        assert_eq!(amount(dec!(1234)), "1\u{00A0}234,00\u{00A0}€");
     }
 
     #[test]

@@ -76,12 +76,12 @@
 - [x] 9.1 Écrans de création du PIN et de verrouillage (pavé numérique, biométrie, compte à rebours après 5 échecs)
 - [x] 9.2 Dashboard : carte patrimoine (glow, dégradé), variation, barre de répartition, liste des comptes avec provenance, indicateurs budgétaires, courbe 6 mois / 1 an / tout, tirer pour rafraîchir, flash de mise à jour des cours
 - [x] 9.3 Comptes : liste, création (type, nom, couleur, versement programmé), détail livret (solde, taux, plafond)
-- [ ] 9.4 Détail PEA / crypto : positions, recherche d'actif, quantité, prix de revient, plus-value latente, solde espèces
-- [ ] 9.5 Détail PEI : fonds, actif de référence, saisie de valeur de part (réel vs estimée)
-- [ ] 9.6 Budget : salaire et historique, revenus ponctuels, charges fixes, dépenses du mois (filtre catégorie, total), gestion des catégories, capacité d'épargne
-- [ ] 9.7 Saisie rapide « + » : dépense en 3 interactions, revenu ponctuel, mise à jour de solde
-- [ ] 9.8 Projection : sélecteur 3 / 6 / 12 mois, 3 courbes, tableau par compte, épargne non affectée, avertissements, édition des rendements par scénario
-- [ ] 9.9 Réglages : biométrie, changement de PIN, clé Twelve Data (+ test de la clé), export / import JSON avec avertissements, rappel d'export > 30 jours
+- [x] 9.4 Détail PEA / crypto : positions, recherche d'actif, quantité, prix de revient, plus-value latente, solde espèces
+- [x] 9.5 Détail PEI : fonds, actif de référence, saisie de valeur de part (réel vs estimée)
+- [x] 9.6 Budget : salaire et historique, revenus ponctuels, charges fixes, dépenses du mois (filtre catégorie, total), gestion des catégories, capacité d'épargne
+- [x] 9.7 Saisie rapide « + » : dépense en 3 interactions, revenu ponctuel, mise à jour de solde
+- [x] 9.8 Projection : sélecteur 3 / 6 / 12 mois, 3 courbes, tableau par compte, épargne non affectée, avertissements, édition des rendements par scénario
+- [x] 9.9 Réglages : biométrie, changement de PIN, clé Twelve Data (+ test de la clé), export / import JSON avec avertissements, rappel d'export > 30 jours
 
 ## 10. Vérification et livraison
 

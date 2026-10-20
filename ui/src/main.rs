@@ -4,6 +4,7 @@ mod api;
 mod app;
 mod charts;
 mod components;
+mod files;
 mod format;
 mod icons;
 mod pages;

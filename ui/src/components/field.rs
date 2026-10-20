@@ -11,6 +11,9 @@ pub fn Field(
     #[prop(into)] label: String,
     value: RwSignal<String>,
     #[prop(default = "text")] input_mode: &'static str,
+    /// `"date"` (AAAA-MM-JJ) ou `"month"` (AAAA-MM) pour un sélecteur natif.
+    #[prop(default = "text")]
+    input_type: &'static str,
     #[prop(optional)] suffix: Option<&'static str>,
     #[prop(optional, into)] placeholder: String,
     #[prop(optional, into)] error: MaybeProp<String>,
@@ -22,6 +25,7 @@ pub fn Field(
             <span class="relative">
                 <input
                     class=format!("{INPUT} {padding}")
+                    type=input_type
                     inputmode=input_mode
                     autocomplete="off"
                     placeholder=placeholder

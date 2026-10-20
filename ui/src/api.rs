@@ -3,10 +3,6 @@
 //! Chaque commande prend au plus un argument `input` (DTO). Une erreur `session_locked`
 //! renvoyée par n'importe quelle commande repasse l'UI sur l'écran de verrouillage.
 
-// L'API couvre toutes les commandes du backend ; les écrans de l'étape 9 les utilisent au fur et
-// à mesure.
-#![allow(dead_code)]
-
 use lc_shared_dto::*;
 use serde::Serialize;
 use serde::de::DeserializeOwned;

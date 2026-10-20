@@ -100,7 +100,7 @@ pub fn DashboardPage() -> impl IntoView {
             .into_any(),
             Some(Err(error)) => view! { <ErrorBanner message=error.message /> }.into_any(),
             Some(Ok(dashboard)) => view! {
-                <Overview dashboard=dashboard refreshing=refreshing flashes=flashes on_refresh=Callback::new(move |_| fetch(true)) />
+                <Overview dashboard=dashboard refreshing=refreshing flashes=flashes on_refresh=Callback::new(move |_| fetch(true)) on_snapshot=Callback::new(move |_| spawn_local(async move { let _ = api::take_manual_snapshot().await; fetch(false); })) />
             }
             .into_any(),
         }}
@@ -113,6 +113,7 @@ fn Overview(
     refreshing: RwSignal<bool>,
     flashes: RwSignal<HashMap<String, bool>>,
     on_refresh: Callback<()>,
+    on_snapshot: Callback<()>,
 ) -> impl IntoView {
     let segments = dashboard
         .accounts
@@ -189,7 +190,7 @@ fn Overview(
         </section>
 
         <MonthSummary dashboard_budget=dashboard.budget />
-        <History points=dashboard.history />
+        <History points=dashboard.history on_snapshot=on_snapshot />
     }
 }
 
@@ -269,13 +270,13 @@ fn Stat(label: &'static str, value: Decimal) -> impl IntoView {
 }
 
 #[component]
-fn History(points: Vec<HistoryPointDto>) -> impl IntoView {
+fn History(points: Vec<HistoryPointDto>, on_snapshot: Callback<()>) -> impl IntoView {
     let period = RwSignal::new(Period::SixMonths);
     let points = StoredValue::new(points);
     view! {
         <section class="flex flex-col gap-2">
             <div class="flex items-center justify-between">
-                <h2 class=SECTION_TITLE>"Évolution"</h2>
+                <span class="flex items-center gap-1"><h2 class=SECTION_TITLE>"Évolution"</h2><button class="min-h-9 px-2 text-xs text-secondary-light" on:click=move |_| on_snapshot.run(())>"Figer ce mois"</button></span>
                 <div class="flex rounded-xl bg-surface p-1 text-xs" role="tablist">
                     {[Period::SixMonths, Period::OneYear, Period::All]
                         .into_iter()

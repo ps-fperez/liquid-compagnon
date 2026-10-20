@@ -16,9 +16,16 @@ use crate::util::{load, pricing_issue_message};
 #[component]
 pub fn AccountsPage() -> impl IntoView {
     let query = use_query_map();
-    let create_open = RwSignal::new(query.with_untracked(|q| q.get("nouveau").is_some()));
-    let balance_open =
-        RwSignal::new(query.with_untracked(|q| q.get("saisie").as_deref() == Some("solde")));
+    let create_open = RwSignal::new(false);
+    let balance_open = RwSignal::new(false);
+    Effect::new(move |_| {
+        if query.with(|q| q.get("nouveau").is_some()) {
+            create_open.set(true);
+        }
+        if query.with(|q| q.get("saisie").as_deref() == Some("solde")) {
+            balance_open.set(true);
+        }
+    });
     let include_archived = RwSignal::new(false);
     let data = RwSignal::new(None::<Result<AccountListDto, ErrorDto>>);
     let reload = move || {
