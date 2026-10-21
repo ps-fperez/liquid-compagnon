@@ -1,6 +1,7 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_location;
 
+use crate::components::AppLogo;
 use crate::components::style::BTN_SECONDARY;
 use crate::icons::{Icon, IconName};
 use crate::pages::{LockScreen, SetupPin};
@@ -38,9 +39,7 @@ pub fn SessionGate(children: ChildrenFn) -> impl IntoView {
 fn Splash() -> impl IntoView {
     view! {
         <div class="flex min-h-dvh items-center justify-center">
-            <span class="flex size-16 animate-pulse items-center justify-center rounded-2xl bg-primary text-xl font-semibold text-bg shadow-glow-primary">
-                "LC"
-            </span>
+            <AppLogo class="size-20 animate-pulse drop-shadow-[0_0_18px_rgb(168_85_247/0.6)]" />
         </div>
     }
 }

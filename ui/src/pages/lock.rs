@@ -7,6 +7,7 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 
 use crate::api;
+use crate::components::AppLogo;
 use crate::components::style::BTN_PRIMARY;
 use crate::icons::{Icon, IconName};
 use crate::state::use_session;
@@ -95,9 +96,7 @@ fn PinLayout(title: Signal<String>, subtitle: Signal<String>, children: Children
     view! {
         <div class="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-between gap-6 px-6 pt-[calc(3rem+env(safe-area-inset-top))] pb-[calc(2rem+env(safe-area-inset-bottom))]">
             <div class="flex flex-col items-center gap-3 text-center">
-                <span class="flex size-14 items-center justify-center rounded-2xl bg-primary text-lg font-semibold text-bg shadow-glow-primary">
-                    "LC"
-                </span>
+                <AppLogo class="size-16 drop-shadow-[0_0_16px_rgb(168_85_247/0.55)]" />
                 <h1 class="text-xl font-medium">{move || title.get()}</h1>
                 <p class="text-sm text-muted">{move || subtitle.get()}</p>
             </div>

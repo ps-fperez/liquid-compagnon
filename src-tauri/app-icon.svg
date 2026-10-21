@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Icône Liquid Compagnon : une goutte en forme de bouclier (la liquidité et la sécurité), à
+       double paroi comme un coffre. La surface du liquide est une courbe de cours, avec ses
+       hausses et ses baisses, orientée à la hausse et achevée sur un point lumineux (l'épargne
+       qui grandit). Violet électrique sur noir, verre sombre, lumière qui vient du liquide. -->
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="36%" r="76%">
+      <stop offset="0" stop-color="#1f0e3a"/>
+      <stop offset="0.6" stop-color="#0c0617"/>
+      <stop offset="1" stop-color="#05030a"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="0.25" y1="0" x2="0.75" y2="1">
+      <stop offset="0" stop-color="#f5ecff"/>
+      <stop offset="0.45" stop-color="#b57bff"/>
+      <stop offset="1" stop-color="#6d28d9"/>
+    </linearGradient>
+    <radialGradient id="glass" cx="40%" cy="30%" r="80%">
+      <stop offset="0" stop-color="#1c0d35"/>
+      <stop offset="1" stop-color="#090414"/>
+    </radialGradient>
+    <linearGradient id="liquid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a855f7"/>
+      <stop offset="0.5" stop-color="#7c3aed"/>
+      <stop offset="1" stop-color="#2e0a73"/>
+    </linearGradient>
+    <linearGradient id="crest" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#e9d5ff" stop-opacity="0.1"/>
+      <stop offset="0.6" stop-color="#f0e2ff" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#ffffff"/>
+    </linearGradient>
+    <!-- Goutte-blason : pointe de goutte au centre, deux cornes d'écu en haut, ventre arrondi
+         jusqu'à la pointe basse -->
+    <path id="drop" d="M512 140 C536 196 572 268 612 318 C640 284 678 252 716 228 C744 320 772 440 768 568 C760 716 650 808 512 868 C374 808 264 716 256 568 C252 440 280 320 308 228 C346 252 384 284 412 318 C452 268 488 196 512 140 Z"/>
+    <clipPath id="inside"><use href="#drop"/></clipPath>
+    <filter id="halo" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="28"/>
+    </filter>
+    <filter id="spark" x="-200%" y="-200%" width="500%" height="500%">
+      <feGaussianBlur stdDeviation="9" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" rx="230" fill="url(#bg)"/>
+
+  <!-- Lumière émise par le liquide -->
+  <ellipse cx="512" cy="690" rx="240" ry="160" fill="#8b3dff" opacity="0.32" filter="url(#halo)"/>
+
+  <!-- Verre sombre -->
+  <use href="#drop" fill="url(#glass)"/>
+
+  <!-- Liquide : sa surface est une courbe de cours, en hausse sur la période -->
+  <g clip-path="url(#inside)">
+    <path d="M250 676 L330 648 L384 670 L452 614 L500 636 L566 574 L606 596 L652 548 L700 566 L790 520 V900 H250 Z"
+          fill="url(#liquid)" stroke-linejoin="round"/>
+    <polyline points="250,676 330,648 384,670 452,614 500,636 566,574 606,596 652,548"
+              fill="none" stroke="url(#crest)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Profondeur -->
+    <ellipse cx="512" cy="900" rx="300" ry="160" fill="#1a0547" opacity="0.55" filter="url(#halo)"/>
+  </g>
+
+  <!-- Double paroi : contour lumineux et paroi intérieure fine -->
+  <use href="#drop" fill="none" stroke="url(#rim)" stroke-width="18" stroke-linejoin="miter" stroke-miterlimit="8"/>
+  <use href="#drop" fill="none" stroke="#e9d5ff" stroke-opacity="0.22" stroke-width="4.6" stroke-linejoin="miter"
+       transform="translate(512 536) scale(0.86) translate(-512 -536)"/>
+
+  <!-- Dernier point de la courbe -->
+  <circle cx="652" cy="548" r="15" fill="#ffffff" filter="url(#spark)"/>
+
+  <!-- Reflet vitré -->
+  <path d="M380 470 C392 414 424 366 462 326" fill="none" stroke="#ffffff" stroke-opacity="0.5"
+        stroke-width="14" stroke-linecap="round"/>
+</svg>
