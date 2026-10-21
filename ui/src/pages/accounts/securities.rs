@@ -6,7 +6,10 @@ use leptos::prelude::*;
 
 use super::asset_search::AssetSearch;
 use crate::api;
+use crate::components::Busy;
+use crate::components::amount_hint;
 use crate::components::style::{BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, SECTION_TITLE};
+use crate::components::toast;
 use crate::components::{Amount, BottomSheet, Card, EmptyState, Field, ProvenanceBadge};
 use crate::format;
 use crate::util::run_action;
@@ -156,6 +159,7 @@ fn PositionForm(
             unit_cost,
         };
         run_action(busy, error, api::upsert_position(input), move |()| {
+            toast::success("Position enregistrée");
             open.set(false);
             on_saved.run(());
         });
@@ -170,6 +174,7 @@ fn PositionForm(
             asset: chosen,
         };
         run_action(busy, error, api::remove_position(input), move |()| {
+            toast::success("Position retirée");
             open.set(false);
             on_saved.run(());
         });
@@ -192,10 +197,10 @@ fn PositionForm(
                 view! { <AssetSearch sources=sources selected=asset label="Actif" placeholder=placeholder /> }.into_any()
             }}
             <Field label="Quantité détenue" value=quantity input_mode="decimal" placeholder="0,15" />
-            <Field label="Prix de revient unitaire (facultatif)" value=unit_cost input_mode="decimal" suffix="€" />
+            <Field label="Prix de revient unitaire (facultatif)" value=unit_cost input_mode="decimal" suffix="€" hint="Pour calculer la plus-value latente" />
             <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
-            <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit>"Enregistrer"</button>
-            {editing.then(|| view! { <button class=BTN_DANGER disabled=move || busy.get() on:click=remove>"Retirer cette position"</button> })}
+            <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit><Busy busy=busy />"Enregistrer"</button>
+            {editing.then(|| view! { <button class=BTN_DANGER disabled=move || busy.get() on:click=remove><Busy busy=busy />"Retirer cette position"</button> })}
         </div>
     }
 }
@@ -224,6 +229,7 @@ fn CashSheet(
                 cash,
             }),
             move |()| {
+                toast::success("Espèces mises à jour");
                 open.set(false);
                 on_saved.run(());
             },
@@ -232,9 +238,9 @@ fn CashSheet(
     view! {
         <BottomSheet open=open title="Espèces">
             <div class="flex flex-col gap-4">
-                <Field label="Solde espèces" value=amount input_mode="decimal" suffix="€" />
+                <Field label="Solde espèces" value=amount input_mode="decimal" suffix="€" hint=Signal::derive(move || Some(amount_hint(&amount.get()))) />
                 <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
-                <button class=BTN_SECONDARY disabled=move || busy.get() on:click=submit>"Enregistrer"</button>
+                <button class=BTN_SECONDARY disabled=move || busy.get() on:click=submit><Busy busy=busy />"Enregistrer"</button>
             </div>
         </BottomSheet>
     }

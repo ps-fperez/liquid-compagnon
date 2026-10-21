@@ -2,6 +2,7 @@ use leptos::prelude::*;
 use leptos_router::components::{Route, Router, Routes};
 use leptos_router::path;
 
+use crate::components::{LoadingBar, ToastHost, loading, toast};
 use crate::pages::{
     AccountDetailPage, AccountsPage, BudgetPage, DashboardPage, Gallery, NotFound, ProjectionPage,
     SettingsPage,
@@ -15,6 +16,8 @@ use crate::state::{Privacy, Session, watch_visibility};
 /// le bouton retour d'Android remonte dans l'historique).
 #[component]
 pub fn App() -> impl IntoView {
+    toast::provide_toasts();
+    loading::provide_loading();
     Session::provide();
     Privacy::provide();
     Onboarding::provide();
@@ -22,6 +25,8 @@ pub fn App() -> impl IntoView {
     watch_visibility();
 
     view! {
+        <LoadingBar />
+        <ToastHost />
         <Router>
             <SessionGate>
                 <Header />

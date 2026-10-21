@@ -6,6 +6,7 @@ use leptos::task::spawn_local;
 
 use crate::api;
 use crate::components::style::{INPUT, LABEL};
+use crate::components::sync_input;
 use crate::icons::{Icon, IconName};
 use crate::util::source_label;
 
@@ -100,6 +101,8 @@ pub fn AssetSearch(
 ) -> impl IntoView {
     let source = RwSignal::new(sources[0]);
     let query = RwSignal::new(String::new());
+    let query_input = NodeRef::<leptos::html::Input>::new();
+    sync_input(query_input, query);
     let results = RwSignal::new(Vec::<AssetDto>::new());
     let searching = RwSignal::new(false);
     let message = RwSignal::new(None::<String>);
@@ -216,7 +219,8 @@ pub fn AssetSearch(
                         placeholder=placeholder.clone()
                         autocomplete="off"
                         enterkeyhint="search"
-                        prop:value=move || query.get()
+                        node_ref=query_input
+                        value=query.get_untracked()
                         on:input=move |event| on_input(event_target_value(&event))
                         on:keydown=move |event| if event.key() == "Enter" { search() }
                     />

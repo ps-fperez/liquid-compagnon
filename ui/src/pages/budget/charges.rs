@@ -4,7 +4,10 @@ use lc_shared_dto::{CategoryDto, ChargeDto, ChargeInput, IdInput, PeriodicityDto
 use leptos::prelude::*;
 
 use crate::api;
+use crate::components::Busy;
+use crate::components::amount_hint;
 use crate::components::style::{BTN_DANGER, BTN_GHOST, BTN_PRIMARY, LABEL, SECTION_TITLE};
+use crate::components::toast;
 use crate::components::{Amount, BottomSheet, Card, EmptyState, Field};
 use crate::format;
 use crate::util::{Loaded, current_month, run_action};
@@ -150,6 +153,7 @@ fn ChargeSheet(
             end: Some(end.get_untracked()).filter(|e| !e.trim().is_empty()),
         };
         run_action(busy, error, api::upsert_charge(input), move |_: String| {
+            toast::success("Charge fixe enregistrée");
             if !editing {
                 label.set(String::new());
                 amount.set(String::new());
@@ -161,6 +165,7 @@ fn ChargeSheet(
     let remove = move |_| {
         let Some(id) = ids.get_value().0 else { return };
         run_action(busy, error, api::delete_charge(IdInput { id }), move |()| {
+            toast::success("Charge fixe supprimée");
             open.set(false);
             on_saved.run(());
         });
@@ -180,7 +185,7 @@ fn ChargeSheet(
         <BottomSheet open=open title=if editing { "Charge fixe" } else { "Nouvelle charge fixe" }>
             <div class="flex flex-col gap-4">
                 <Field label="Libellé" value=label placeholder="Loyer" />
-                <Field label="Montant" value=amount input_mode="decimal" suffix="€" />
+                <Field label="Montant" value=amount input_mode="decimal" suffix="€" hint=Signal::derive(move || Some(amount_hint(&amount.get()))) />
                 <div class="flex flex-col gap-1.5">
                     <span class=LABEL>"Fréquence"</span>
                     <div class="flex flex-wrap gap-2">
@@ -216,8 +221,8 @@ fn ChargeSheet(
                     <Field label="Jusqu'à (facultatif)" value=end input_type="month" />
                 </div>
                 <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
-                <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit>"Enregistrer"</button>
-                {editing.then(|| view! { <button class=BTN_DANGER disabled=move || busy.get() on:click=remove>"Supprimer"</button> })}
+                <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit><Busy busy=busy />"Enregistrer"</button>
+                {editing.then(|| view! { <button class=BTN_DANGER disabled=move || busy.get() on:click=remove><Busy busy=busy />"Supprimer"</button> })}
             </div>
         </BottomSheet>
     }

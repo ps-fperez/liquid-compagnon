@@ -8,8 +8,11 @@ use leptos::prelude::*;
 
 use crate::api;
 use crate::charts::{LineChart, Series, to_f64};
+use crate::components::Busy;
 use crate::components::style::{BTN_GHOST, BTN_PRIMARY, SECTION_TITLE};
+use crate::components::toast;
 use crate::components::{Amount, BottomSheet, Card, EmptyState, ErrorBanner, Field, Skeleton};
+use crate::components::{Notice, NoticeKind};
 use crate::format;
 use crate::util::{load, pricing_issue_message, run_action};
 
@@ -135,7 +138,10 @@ fn ProjectionView(
         .collect::<Vec<_>>();
 
     view! {
-        {issues.into_iter().map(|message| view! { <ErrorBanner message=message /> }).collect_view()}
+        {issues.into_iter().map(|message| {
+            let key = format!("cours.{message}");
+            view! { <Notice kind=NoticeKind::Warning message=message dismiss_key=key /> }
+        }).collect_view()}
         <Card>{chart}</Card>
 
         <div class="grid grid-cols-3 gap-2">
@@ -154,7 +160,11 @@ fn ProjectionView(
         </div>
 
         {excess.map(|amount| view! {
-            <ErrorBanner message=format!("Vos versements programmés dépassent votre capacité d'épargne de {}", format::amount(amount)) />
+            <Notice
+                kind=NoticeKind::Warning
+                message=format!("Vos versements programmés dépassent votre capacité d'épargne de {}", format::amount(amount))
+                dismiss_key="versements-excessifs"
+            />
         })}
 
         <Card class="flex flex-col gap-2">
@@ -271,6 +281,7 @@ fn RatesSheet(open: RwSignal<bool>, account: AccountDto, on_saved: Callback<()>)
                 rates,
             }),
             move |()| {
+                toast::success("Rendements enregistrés");
                 open.set(false);
                 on_saved.run(());
             },
@@ -284,7 +295,7 @@ fn RatesSheet(open: RwSignal<bool>, account: AccountDto, on_saved: Callback<()>)
                 <Field label="Neutre" value=neutral input_mode="decimal" suffix="%" />
                 <Field label="Optimiste" value=optimistic input_mode="decimal" suffix="%" />
                 <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
-                <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit>"Enregistrer"</button>
+                <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit><Busy busy=busy />"Enregistrer"</button>
             </div>
         </BottomSheet>
     }

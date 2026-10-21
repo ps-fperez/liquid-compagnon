@@ -2,7 +2,10 @@ use lc_shared_dto::{CategoryDto, CategoryNameInput, IdInput};
 use leptos::prelude::*;
 
 use crate::api;
+use crate::components::Busy;
 use crate::components::style::{BTN_GHOST, BTN_SECONDARY, INPUT};
+use crate::components::sync_input;
+use crate::components::toast;
 use crate::components::{BottomSheet, Field};
 use crate::util::run_action;
 
@@ -24,6 +27,7 @@ pub fn CategoriesSheet(
             name: new_name.get_untracked(),
         };
         run_action(busy, error, api::save_category(input), move |_: String| {
+            toast::success("Catégorie enregistrée");
             new_name.set(String::new());
             on_saved.run(());
         });
@@ -39,7 +43,7 @@ pub fn CategoriesSheet(
                     }).collect_view()}
                 </div>
                 <Field label="Nouvelle catégorie" value=new_name placeholder="Animaux" />
-                <button class=BTN_SECONDARY disabled=move || busy.get() on:click=create>"Ajouter la catégorie"</button>
+                <button class=BTN_SECONDARY disabled=move || busy.get() on:click=create><Busy busy=busy />"Ajouter la catégorie"</button>
             </div>
         </BottomSheet>
     }
@@ -54,6 +58,8 @@ fn CategoryRow(
 ) -> impl IntoView {
     let renaming = RwSignal::new(false);
     let name = RwSignal::new(category.name.clone());
+    let name_input = NodeRef::<leptos::html::Input>::new();
+    sync_input(name_input, name);
     let id = StoredValue::new(category.id.clone());
     let archived = category.archived;
 
@@ -63,6 +69,7 @@ fn CategoryRow(
             name: name.get_untracked(),
         };
         run_action(busy, error, api::save_category(input), move |_: String| {
+            toast::success("Catégorie enregistrée");
             renaming.set(false);
             on_saved.run(());
         });
@@ -71,10 +78,12 @@ fn CategoryRow(
         let input = IdInput { id: id.get_value() };
         if archived {
             run_action(busy, error, api::unarchive_category(input), move |()| {
+                toast::success("Catégorie réactivée");
                 on_saved.run(())
             });
         } else {
             run_action(busy, error, api::archive_category(input), move |()| {
+                toast::success("Catégorie archivée");
                 on_saved.run(())
             });
         }
@@ -84,7 +93,10 @@ fn CategoryRow(
             busy,
             error,
             api::delete_category(IdInput { id: id.get_value() }),
-            move |()| on_saved.run(()),
+            move |()| {
+                toast::success("Catégorie supprimée");
+                on_saved.run(());
+            },
         );
     };
 
@@ -103,10 +115,12 @@ fn CategoryRow(
                     <input
                         class=INPUT
                         aria-label="Nom de la catégorie"
-                        prop:value=move || name.get()
+                        node_ref=name_input
+                        value=name.get_untracked()
                         on:input=move |event| name.set(event_target_value(&event))
+                        on:change=move |event| name.set(event_target_value(&event))
                     />
-                    <button class=BTN_SECONDARY disabled=move || busy.get() on:click=rename>"OK"</button>
+                    <button class=BTN_SECONDARY disabled=move || busy.get() on:click=rename><Busy busy=busy />"OK"</button>
                 </div>
             </Show>
             <div class="flex gap-2">

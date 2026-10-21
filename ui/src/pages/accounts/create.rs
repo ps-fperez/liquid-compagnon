@@ -3,7 +3,9 @@ use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
 
 use crate::api;
+use crate::components::Busy;
 use crate::components::style::{BTN_PRIMARY, LABEL};
+use crate::components::toast;
 use crate::components::{BottomSheet, Field};
 use crate::format;
 use crate::util::{ACCOUNT_COLORS, run_action};
@@ -97,6 +99,7 @@ pub fn CreateAccountSheet(open: RwSignal<bool>) -> impl IntoView {
             error,
             api::create_account(input),
             move |id: String| {
+                toast::success("Compte créé");
                 open.set(false);
                 navigate
                     .with_value(|navigate| navigate(&format!("/comptes/{id}"), Default::default()));
@@ -137,7 +140,7 @@ pub fn CreateAccountSheet(open: RwSignal<bool>) -> impl IntoView {
                     placeholder="0,00"
                 />
                 <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
-                <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit>"Créer le compte"</button>
+                <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit><Busy busy=busy />"Créer le compte"</button>
             </div>
         </BottomSheet>
     }

@@ -6,7 +6,9 @@ use leptos::prelude::*;
 
 use super::asset_search::AssetSearch;
 use crate::api;
+use crate::components::Busy;
 use crate::components::style::{BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, SECTION_TITLE};
+use crate::components::toast;
 use crate::components::{Amount, BottomSheet, Card, EmptyState, Field, ProvenanceBadge};
 use crate::format;
 use crate::util::run_action;
@@ -109,6 +111,7 @@ fn NewFundSheet(open: RwSignal<bool>, account_id: String, on_saved: Callback<()>
             error,
             api::create_pei_fund(input),
             move |_: String| {
+                toast::success("Fonds ajouté");
                 open.set(false);
                 on_saved.run(());
             },
@@ -123,7 +126,7 @@ fn NewFundSheet(open: RwSignal<bool>, account_id: String, on_saved: Callback<()>
                 <AssetSearch sources=vec![QuoteSourceDto::Yahoo, QuoteSourceDto::TwelveData] selected=reference label="Indice de référence (facultatif)" placeholder="IWDA, CW8…" />
                 <p class="text-xs text-muted">{REFERENCE_HELP}</p>
                 <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
-                <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit>"Ajouter"</button>
+                <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit><Busy busy=busy />"Ajouter"</button>
             </div>
         </BottomSheet>
     }
@@ -160,6 +163,7 @@ fn FundSheet(
                 nav,
             }),
             move |()| {
+                toast::success("Valeur de part enregistrée");
                 open.set(false);
                 on_saved.run(());
             },
@@ -179,6 +183,7 @@ fn FundSheet(
             reference: reference.get_untracked(),
         };
         run_action(busy, error, api::update_pei_fund(input), move |()| {
+            toast::success("Fonds modifié");
             open.set(false);
             on_saved.run(());
         });
@@ -193,6 +198,7 @@ fn FundSheet(
                 fund_id,
             }),
             move |()| {
+                toast::success("Fonds retiré");
                 open.set(false);
                 on_saved.run(());
             },
@@ -211,15 +217,15 @@ fn FundSheet(
                     " (dernière saisie le " {format::date(fund.nav_date)} ")"
                 </p>
                 <Field label="Valeur de part réelle" value=nav input_mode="decimal" suffix="€" placeholder="Lue sur votre espace d'épargne salariale" />
-                <button class=BTN_PRIMARY disabled=move || busy.get() on:click=record>"Enregistrer la valeur de part"</button>
+                <button class=BTN_PRIMARY disabled=move || busy.get() on:click=record><Busy busy=busy />"Enregistrer la valeur de part"</button>
 
                 <h3 class=format!("{SECTION_TITLE} mt-2")>"Modifier le fonds"</h3>
                 <Field label="Nom du fonds" value=name />
                 <Field label="Nombre de parts" value=units input_mode="decimal" />
                 <AssetSearch sources=vec![QuoteSourceDto::Yahoo, QuoteSourceDto::TwelveData] selected=reference label="Indice de référence" placeholder="IWDA, CW8…" />
                 <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
-                <button class=BTN_SECONDARY disabled=move || busy.get() on:click=update>"Enregistrer les modifications"</button>
-                <button class=BTN_DANGER disabled=move || busy.get() on:click=remove>"Supprimer ce fonds"</button>
+                <button class=BTN_SECONDARY disabled=move || busy.get() on:click=update><Busy busy=busy />"Enregistrer les modifications"</button>
+                <button class=BTN_DANGER disabled=move || busy.get() on:click=remove><Busy busy=busy />"Supprimer ce fonds"</button>
             </div>
         </BottomSheet>
     }

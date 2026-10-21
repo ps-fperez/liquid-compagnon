@@ -3,7 +3,9 @@ use leptos::prelude::*;
 
 use super::create::{ColorPicker, optional_amount};
 use crate::api;
+use crate::components::Busy;
 use crate::components::style::{BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY};
+use crate::components::toast;
 use crate::components::{BottomSheet, Field};
 use crate::format;
 use crate::util::run_action;
@@ -33,6 +35,7 @@ pub fn AccountSettingsSheet(
             monthly_contribution,
         };
         run_action(busy, error, api::update_account(input), move |()| {
+            toast::success("Compte modifié");
             open.set(false);
             on_saved.run(());
         });
@@ -45,7 +48,7 @@ pub fn AccountSettingsSheet(
                 <Field label="Versement mensuel programmé" value=contribution input_mode="decimal" suffix="€" />
                 <p class="text-xs text-muted">"Utilisé par la projection pour alimenter ce compte chaque mois."</p>
                 <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
-                <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit>"Enregistrer"</button>
+                <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit><Busy busy=busy />"Enregistrer"</button>
             </div>
         </BottomSheet>
     }
@@ -63,6 +66,11 @@ pub fn ArchiveControl(account_id: String, archived: bool, on_saved: Callback<()>
             id: account_id.get_value(),
         };
         let on_done = move |()| {
+            toast::success(if archived {
+                "Compte rouvert"
+            } else {
+                "Compte clôturé"
+            });
             confirm.set(false);
             on_saved.run(());
         };
@@ -84,7 +92,7 @@ pub fn ArchiveControl(account_id: String, archived: bool, on_saved: Callback<()>
                     "Il sort de votre patrimoine actuel. Son historique est conservé et vous pourrez le rouvrir."
                 </p>
                 <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
-                <button class=BTN_DANGER disabled=move || busy.get() on:click=apply>"Clôturer"</button>
+                <button class=BTN_DANGER disabled=move || busy.get() on:click=apply><Busy busy=busy />"Clôturer"</button>
             </div>
         </BottomSheet>
     }

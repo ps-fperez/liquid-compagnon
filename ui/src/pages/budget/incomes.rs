@@ -5,7 +5,10 @@ use lc_shared_dto::{
 use leptos::prelude::*;
 
 use crate::api;
+use crate::components::Busy;
+use crate::components::amount_hint;
 use crate::components::style::{BTN_DANGER, BTN_GHOST, BTN_PRIMARY, SECTION_TITLE};
+use crate::components::toast;
 use crate::components::{Amount, BottomSheet, Card, EmptyState, Field};
 use crate::format;
 use crate::util::{Loaded, current_month, run_action, today};
@@ -150,6 +153,7 @@ fn SalarySheet(
             net_amount,
         };
         run_action(busy, error, api::upsert_salary(input), move |_: String| {
+            toast::success("Salaire enregistré");
             open.set(false);
             on_saved.run(());
         });
@@ -157,6 +161,7 @@ fn SalarySheet(
     let remove = move |_| {
         let Some(id) = id.get_value() else { return };
         run_action(busy, error, api::delete_salary(IdInput { id }), move |()| {
+            toast::success("Salaire supprimé");
             open.set(false);
             on_saved.run(());
         });
@@ -164,12 +169,12 @@ fn SalarySheet(
     view! {
         <BottomSheet open=open title=if editing { "Salaire" } else { "Nouveau salaire" }>
             <div class="flex flex-col gap-4">
-                <Field label="Salaire net mensuel (net à payer)" value=amount input_mode="decimal" suffix="€" />
+                <Field label="Salaire net mensuel (net à payer)" value=amount input_mode="decimal" suffix="€" hint=Signal::derive(move || Some(amount_hint(&amount.get()))) />
                 <Field label="À partir de" value=month input_type="month" />
                 <p class="text-xs text-muted">"Le salaire s'applique à ce mois et aux suivants, jusqu'au prochain changement."</p>
                 <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
-                <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit>"Enregistrer"</button>
-                {editing.then(|| view! { <button class=BTN_DANGER disabled=move || busy.get() on:click=remove>"Supprimer"</button> })}
+                <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit><Busy busy=busy />"Enregistrer"</button>
+                {editing.then(|| view! { <button class=BTN_DANGER disabled=move || busy.get() on:click=remove><Busy busy=busy />"Supprimer"</button> })}
             </div>
         </BottomSheet>
     }
@@ -226,6 +231,7 @@ fn IncomeSheet(
             error,
             api::upsert_one_off_income(input),
             move |_: String| {
+                toast::success("Revenu ponctuel enregistré");
                 if !editing {
                     label.set(String::new());
                     amount.set(String::new());
@@ -243,6 +249,7 @@ fn IncomeSheet(
             error,
             api::delete_one_off_income(IdInput { id }),
             move |()| {
+                toast::success("Revenu ponctuel supprimé");
                 open.set(false);
                 on_saved.run(());
             },
@@ -252,12 +259,12 @@ fn IncomeSheet(
         <BottomSheet open=open title=if editing { "Revenu ponctuel" } else { "Nouveau revenu ponctuel" }>
             <div class="flex flex-col gap-4">
                 <Field label="Libellé" value=label placeholder="Prime de fin d'année" />
-                <Field label="Montant" value=amount input_mode="decimal" suffix="€" />
+                <Field label="Montant" value=amount input_mode="decimal" suffix="€" hint=Signal::derive(move || Some(amount_hint(&amount.get()))) />
                 <Field label="Date" value=date input_type="date" />
                 <AccountChoice label="Versé sur" options=checking selection=account />
                 <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
-                <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit>"Enregistrer"</button>
-                {editing.then(|| view! { <button class=BTN_DANGER disabled=move || busy.get() on:click=remove>"Supprimer"</button> })}
+                <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit><Busy busy=busy />"Enregistrer"</button>
+                {editing.then(|| view! { <button class=BTN_DANGER disabled=move || busy.get() on:click=remove><Busy busy=busy />"Supprimer"</button> })}
             </div>
         </BottomSheet>
     }

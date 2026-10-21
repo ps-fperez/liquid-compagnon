@@ -9,7 +9,11 @@ use leptos::task::spawn_local;
 
 use crate::api;
 use crate::components::style::{BTN_DANGER, BTN_GHOST, BTN_PRIMARY, LABEL, SECTION_TITLE};
-use crate::components::{Amount, BottomSheet, Card, EmptyState, ErrorBanner, Field, Skeleton};
+use crate::components::toast;
+use crate::components::{
+    Amount, BottomSheet, Busy, Card, EmptyState, ErrorBanner, Field, FieldError, Skeleton,
+    amount_hint,
+};
 use crate::format;
 use crate::util::{Loaded, run_action, today};
 
@@ -153,19 +157,31 @@ pub fn ExpenseSheet(
     );
     let more = RwSignal::new(editing);
     let error = RwSignal::new(None::<String>);
+    let amount_error = FieldError::new();
+    let date_error = FieldError::new();
+    let category_error = RwSignal::new(None::<String>);
     let busy = RwSignal::new(false);
+    // Saisie rapide (nouvelle dépense, sans « Date et libellé ») : toucher une catégorie enregistre.
+    // Sinon, la catégorie est seulement sélectionnée et « Enregistrer » valide la saisie.
+    let quick = move || !editing && !more.get();
     let ids = StoredValue::new((
         existing.as_ref().map(|e| e.id.clone()),
         existing.as_ref().map(|e| e.category_id.clone()),
     ));
 
     let save = move |category_id: String| {
-        let parsed_amount = match format::parse_amount(&amount.get_untracked()) {
+        let raw_amount = amount.get_untracked();
+        let parsed_amount = match format::parse_amount(&raw_amount) {
             Ok(amount) => amount,
-            Err(message) => return error.set(Some(message)),
+            Err(message) => {
+                amount_error.set(raw_amount, message);
+                return toast::warning("Vérifiez le montant");
+            }
         };
-        let Ok(date) = NaiveDate::parse_from_str(&date.get_untracked(), "%Y-%m-%d") else {
-            return error.set(Some("Date invalide".into()));
+        let raw_date = date.get_untracked();
+        let Ok(date) = NaiveDate::parse_from_str(&raw_date, "%Y-%m-%d") else {
+            date_error.set(raw_date, "Date invalide");
+            return toast::warning("Vérifiez la date");
         };
         let label_text = Some(label.get_untracked()).filter(|l| !l.trim().is_empty());
         let input = ExpenseInput {
@@ -177,9 +193,15 @@ pub fn ExpenseSheet(
             account_id: resolve(account.get_untracked(), &checking.get_untracked()),
         };
         run_action(busy, error, api::save_expense(input), move |_: String| {
+            toast::success(if editing {
+                format!("Dépense modifiée : {}", format::amount(parsed_amount))
+            } else {
+                format!("Dépense de {} enregistrée", format::amount(parsed_amount))
+            });
             // Une nouvelle saisie repart d'une feuille vide.
             if !editing {
                 amount.set(String::new());
+                amount_error.clear();
                 label.set(String::new());
                 category.set(None);
                 more.set(false);
@@ -197,6 +219,7 @@ pub fn ExpenseSheet(
             error,
             api::delete_expense(IdInput { id }),
             move |()| {
+                toast::success("Dépense supprimée");
                 open.set(false);
                 on_saved.run(());
             },
@@ -277,7 +300,15 @@ pub fn ExpenseSheet(
     view! {
         <BottomSheet open=open title=if editing { "Dépense" } else { "Nouvelle dépense" }>
             <div class="flex flex-col gap-4">
-                <Field label="Montant" value=amount input_mode="decimal" suffix="€" placeholder="0,00" />
+                <Field
+                    label="Montant"
+                    value=amount
+                    input_mode="decimal"
+                    suffix="€"
+                    placeholder="0,00"
+                    hint=Signal::derive(move || Some(amount_hint(&amount.get())))
+                    error=amount_error.for_value(amount)
+                />
                 {move || {
                     let frequent = if editing || more.get() { Vec::new() } else { matching(4) };
                     (!frequent.is_empty()).then(|| view! {
@@ -288,8 +319,13 @@ pub fn ExpenseSheet(
                     })
                 }}
                 <Show when=move || more.get()>
-                    <Field label="Date" value=date input_type="date" />
-                    <Field label="Libellé (facultatif)" value=label placeholder="Courses du marché" />
+                    <Field label="Date" value=date input_type="date" error=date_error.for_value(date) />
+                    <Field
+                        label="Libellé (facultatif)"
+                        value=label
+                        placeholder="Courses du marché"
+                        hint="Les libellés déjà utilisés sont proposés pendant la frappe"
+                    />
                     {move || {
                         let found = if label.with(|l| l.trim().is_empty()) { Vec::new() } else { matching(4) };
                         (!found.is_empty()).then(|| view! {
@@ -303,7 +339,7 @@ pub fn ExpenseSheet(
                 <AccountChoice label="Payé depuis" options=checking selection=account />
                 <div class="flex flex-col gap-1.5">
                     <span class=LABEL>
-                        {if editing { "Catégorie" } else { "Catégorie (touchez pour enregistrer)" }}
+                        {move || if quick() { "Catégorie (touchez pour enregistrer)" } else { "Catégorie" }}
                     </span>
                     <div class="flex flex-wrap gap-2">
                         {move || usable().into_iter().map(|c| {
@@ -318,7 +354,8 @@ pub fn ExpenseSheet(
                                     disabled=move || busy.get()
                                     on:click=move |_| {
                                         category.set(Some(id.clone()));
-                                        if !editing {
+                                        category_error.set(None);
+                                        if quick() {
                                             save(id.clone());
                                         }
                                     }
@@ -329,19 +366,23 @@ pub fn ExpenseSheet(
                         }).collect_view()}
                     </div>
                 </div>
+                {move || category_error.get().map(|message| view! { <p class="-mt-2 text-sm text-loss" role="alert">{message}</p> })}
                 <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
-                {editing.then(|| view! {
+                <Show when=move || !quick()>
                     <button
                         class=BTN_PRIMARY
                         disabled=move || busy.get()
                         on:click=move |_| match category.get_untracked() {
                             Some(id) => save(id),
-                            None => error.set(Some("Choisissez une catégorie".into())),
+                            None => category_error.set(Some("Choisissez une catégorie".into())),
                         }
                     >
-                        "Enregistrer"
+                        <Busy busy=busy />
+                        {if editing { "Enregistrer" } else { "Enregistrer la dépense" }}
                     </button>
-                    <button class=BTN_DANGER disabled=move || busy.get() on:click=remove>"Supprimer"</button>
+                </Show>
+                {editing.then(|| view! {
+                    <button class=BTN_DANGER disabled=move || busy.get() on:click=remove><Busy busy=busy />"Supprimer"</button>
                 })}
             </div>
         </BottomSheet>

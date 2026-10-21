@@ -10,6 +10,7 @@ use super::quick_balance::QuickBalanceSheet;
 use crate::api;
 use crate::components::style::BTN_PRIMARY;
 use crate::components::{Amount, Card, EmptyState, ErrorBanner, ProvenanceBadge, Skeleton};
+use crate::components::{Notice, NoticeKind};
 use crate::icons::{Icon, IconName};
 use crate::util::{load, pricing_issue_message};
 
@@ -68,7 +69,11 @@ pub fn AccountsPage() -> impl IntoView {
                     .cloned()
                     .collect();
                 view! {
-                    {list.pricing_issues.iter().map(|issue| view! { <ErrorBanner message=pricing_issue_message(issue) /> }).collect_view()}
+                    {list.pricing_issues.iter().map(|issue| {
+                        let message = pricing_issue_message(issue);
+                        let key = format!("cours.{message}");
+                        view! { <Notice kind=NoticeKind::Warning message=message dismiss_key=key /> }
+                    }).collect_view()}
                     <Card class="flex flex-col p-1">
                         {list.accounts.into_iter().map(|account| view! { <AccountRow account=account /> }).collect_view()}
                     </Card>

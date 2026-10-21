@@ -2,7 +2,10 @@ use lc_shared_dto::{AccountDetailsDto, AccountDto, BalanceInput};
 use leptos::prelude::*;
 
 use crate::api;
+use crate::components::Busy;
+use crate::components::amount_hint;
 use crate::components::style::{BTN_PRIMARY, LABEL};
+use crate::components::toast;
 use crate::components::{BottomSheet, Field};
 use crate::format;
 use crate::util::run_action;
@@ -63,6 +66,7 @@ pub fn QuickBalanceSheet(
             balance,
         };
         run_action(busy, error, api::update_balance(input), move |()| {
+            toast::success("Solde mis à jour");
             amount.set(String::new());
             overdrawn.set(false);
             open.set(false);
@@ -100,7 +104,7 @@ pub fn QuickBalanceSheet(
                                 <span class="text-xs text-muted">"Solde actuel : " {format::amount(b)}</span>
                             })}
                         </div>
-                        <Field label="Nouveau solde" value=amount input_mode="decimal" suffix="€" placeholder="0,00" />
+                        <Field label="Nouveau solde" value=amount input_mode="decimal" suffix="€" placeholder="0,00" hint=Signal::derive(move || Some(amount_hint(&amount.get()))) />
                         <Show when=is_checking>
                             <label class="flex min-h-11 items-center justify-between gap-3">
                                 <span class="text-sm">"Solde négatif (découvert)"</span>
@@ -113,7 +117,7 @@ pub fn QuickBalanceSheet(
                             </label>
                         </Show>
                         <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
-                        <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit>"Enregistrer"</button>
+                        <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit><Busy busy=busy />"Enregistrer"</button>
                     </div>
                 }
                 .into_any()

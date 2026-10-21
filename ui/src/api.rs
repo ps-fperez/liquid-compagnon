@@ -69,6 +69,8 @@ async fn call<T: DeserializeOwned>(command: &str, args: impl Serialize) -> ApiRe
             "backend Tauri absent (interface ouverte hors de l'application)",
         ));
     }
+    // Barre de chargement globale tant que l'appel est en cours.
+    let _pending = crate::components::loading::begin();
     let serializer = serde_wasm_bindgen::Serializer::json_compatible();
     let args = args
         .serialize(&serializer)

@@ -22,10 +22,13 @@ pub enum IconName {
     Coins,
     Sparkles,
     Search,
+    Check,
+    Alert,
+    Info,
 }
 
 impl IconName {
-    pub const ALL: [IconName; 18] = [
+    pub const ALL: [IconName; 21] = [
         IconName::Home,
         IconName::Wallet,
         IconName::Plus,
@@ -44,6 +47,9 @@ impl IconName {
         IconName::Coins,
         IconName::Sparkles,
         IconName::Search,
+        IconName::Check,
+        IconName::Alert,
+        IconName::Info,
     ];
 
     fn paths(self) -> &'static str {
@@ -90,6 +96,13 @@ impl IconName {
                 r#"<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2 2.2.8-2.2.8L19 21l-.8-2.2-2.2-.8 2.2-.8z"/>"#
             }
             IconName::Search => r#"<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>"#,
+            IconName::Check => {
+                r#"<circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.8 2.8L16.5 9.5"/>"#
+            }
+            IconName::Alert => {
+                r#"<path d="M10.3 3.9 2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4.5M12 17h.01"/>"#
+            }
+            IconName::Info => r#"<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.5h.01"/>"#,
         }
     }
 }

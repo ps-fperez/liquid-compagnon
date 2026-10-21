@@ -101,9 +101,36 @@ async function fill(label, value) {
   if (!ok) await fail(`champ introuvable : « ${label} »`);
 }
 
+/** Donne le focus au champ dont le libellé vaut `label`. */
+async function focusField(label) {
+  const ok = await evaluate(`(() => {
+    const scope = document.querySelector('[role="dialog"]') ?? document;
+    const field = [...scope.querySelectorAll("label")].find(l => l.querySelector("span")?.textContent.trim() === ${JSON.stringify(label)});
+    const input = field?.querySelector("input");
+    input?.focus();
+    return Boolean(input);
+  })()`);
+  if (!ok) await fail(`champ introuvable : « ${label} »`);
+}
+
+/** Frappe réelle au clavier (événements clavier natifs) dans le champ qui a le focus. */
+async function typeText(text) {
+  for (const ch of text) {
+    await send("Input.dispatchKeyEvent", { type: "keyDown", text: ch, key: ch });
+    await send("Input.dispatchKeyEvent", { type: "keyUp", key: ch });
+    await sleep(20);
+  }
+}
+
 async function typePin(pin) {
   for (const digit of pin) await click(digit);
 }
+
+// Préférences d'appareil (bandeaux fermés, mode discret…) : la WebView les garde d'un lancement
+// à l'autre ; le parcours repart de zéro, comme la base temporaire.
+await evaluate("localStorage.clear()");
+await evaluate("location.reload()");
+await sleep(1500);
 
 console.log("1. Création du PIN");
 await waitForText("Créez votre code PIN");
@@ -172,11 +199,18 @@ await waitForText("3 200,00 €");
 await click("Saisie rapide");
 await click("Dépense");
 await waitForText("Nouvelle dépense");
-await fill("Montant", "42,50");
+// Saisie détaillée par une vraie frappe au clavier, libellé avant montant (ordre signalé en
+// recette) : aperçu du montant reconnu, catégorie sélectionnée, puis « Enregistrer la dépense ».
 await click("Date et libellé");
-await fill("Libellé (facultatif)", "Courses");
-await click("Alimentation"); // la catégorie enregistre
-await waitForText("42,50 €");
+await focusField("Libellé (facultatif)");
+await typeText("Courses");
+await focusField("Montant");
+await typeText("42,50");
+await waitForText("= 42,50 €");
+await click("Alimentation"); // sélectionne seulement, en saisie détaillée
+await shot("depense-detaillee");
+await click("Enregistrer la dépense");
+await waitForText("Dépense de 42,50 € enregistrée"); // notification de succès
 // Libellé habituel : reprend libellé et catégorie, et enregistre en un geste.
 await click("Saisie rapide");
 await click("Dépense");
@@ -248,6 +282,7 @@ const backup = await evaluate("window.__TAURI__.core.invoke('export_backup').the
 if (!backup?.includes('"schema_version"') || backup.includes("argon2")) await fail("export invalide ou contenant le PIN");
 // Mises à jour : un build local n'en propose jamais (aucune requête réseau).
 await waitForText("Vérifier maintenant");
+await waitForText("Aucune clé"); // état de la clé Twelve Data
 await waitForText("build de développement");
 await shot("reglages");
 
@@ -272,6 +307,13 @@ await waitForText("Clé Twelve Data absente ou invalide");
 await waitForText("prix de revient"); // valorisé sans cours ni appel réseau
 await waitForText("12 140,25 €"); // 10 640,25 + 500 + 2 × 500
 await shot("cle-absente");
+// Avertissement refermable : il disparaît et reste fermé après un rechargement.
+await click("Fermer l'avertissement");
+if ((await bodyText()).includes("Clé Twelve Data absente ou invalide")) await fail("l'avertissement fermé reste affiché");
+await click("Comptes");
+await click("Accueil");
+await sleep(500);
+if ((await bodyText()).includes("Clé Twelve Data absente ou invalide")) await fail("l'avertissement fermé est réapparu");
 
 console.log("12. Compte courant : solde de référence, dépense rattachée, découvert");
 await click("Comptes");

@@ -14,6 +14,7 @@ use crate::components::style::{BTN_ICON, SECTION_TITLE};
 use crate::components::{
     Amount, Card, EmptyState, ErrorBanner, GlowCard, ProvenanceBadge, Skeleton,
 };
+use crate::components::{Notice, NoticeKind};
 use crate::format;
 use crate::icons::{Icon, IconName};
 use crate::util::{current_month, pricing_issue_message};
@@ -157,11 +158,19 @@ fn Overview(
             {has_accounts.then(|| view! { <div class="mt-5"><AllocationBar segments=segments /></div> })}
         </GlowCard>
 
-        {issues.into_iter().map(|message| view! { <ErrorBanner message=message /> }).collect_view()}
+        {issues.into_iter().map(|message| {
+            let key = format!("cours.{message}");
+            view! { <Notice kind=NoticeKind::Warning message=message dismiss_key=key /> }
+        }).collect_view()}
         {dashboard.export_reminder_due.then(|| view! {
-            <A href="/reglages" attr:class="rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary-soft">
-                "Pensez à exporter une sauvegarde : vos données n'existent que sur ce téléphone."
-            </A>
+            <Notice
+                kind=NoticeKind::Warning
+                message="Aucune sauvegarde depuis 30 jours : vos données n'existent que sur ce téléphone."
+                dismiss_key="export"
+                dismiss_days=7
+            >
+                <A href="/reglages" attr:class="self-start font-medium underline underline-offset-4">"Exporter maintenant"</A>
+            </Notice>
         })}
 
         <section class="flex flex-col gap-2">

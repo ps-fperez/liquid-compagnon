@@ -2,7 +2,10 @@ use lc_shared_dto::{BalanceInput, Decimal, NaiveDate, SavingsTermsInput};
 use leptos::prelude::*;
 
 use crate::api;
+use crate::components::Busy;
+use crate::components::amount_hint;
 use crate::components::style::{BTN_PRIMARY, BTN_SECONDARY};
+use crate::components::toast;
 use crate::components::{Amount, BottomSheet, Card, Field};
 use crate::format;
 use crate::util::run_action;
@@ -52,7 +55,7 @@ pub fn SavingsDetails(
     }
 }
 
-/// Nouveau solde d'un livret ou, avec llow_negative, d'un compte courant (le clavier
+/// Nouveau solde d'un livret ou, avec `allow_negative`, d'un compte courant (le clavier
 /// numérique d'Android n'a pas toujours de signe moins : un interrupteur « Découvert » le remplace).
 #[component]
 pub fn BalanceSheet(
@@ -82,6 +85,7 @@ pub fn BalanceSheet(
             balance,
         };
         run_action(busy, error, api::update_balance(input), move |()| {
+            toast::success("Solde mis à jour");
             open.set(false);
             on_saved.run(());
         });
@@ -89,7 +93,7 @@ pub fn BalanceSheet(
     view! {
         <BottomSheet open=open title="Mettre à jour le solde">
             <div class="flex flex-col gap-4">
-                <Field label="Nouveau solde" value=amount input_mode="decimal" suffix="€" />
+                <Field label="Nouveau solde" value=amount input_mode="decimal" suffix="€" hint=Signal::derive(move || Some(amount_hint(&amount.get()))) />
                 {allow_negative.then(|| view! {
                     <label class="flex min-h-11 items-center justify-between gap-3">
                         <span class="text-sm">"Solde négatif (découvert)"</span>
@@ -102,7 +106,7 @@ pub fn BalanceSheet(
                     </label>
                 })}
                 <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
-                <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit>"Enregistrer"</button>
+                <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit><Busy busy=busy />"Enregistrer"</button>
             </div>
         </BottomSheet>
     }
@@ -136,6 +140,7 @@ fn TermsSheet(
             deposit_ceiling,
         };
         run_action(busy, error, api::set_savings_terms(input), move |()| {
+            toast::success("Taux et plafond enregistrés");
             open.set(false);
             on_saved.run(());
         });
@@ -149,7 +154,7 @@ fn TermsSheet(
                     "Si vos rendements de projection suivent le taux du livret, ils sont mis à jour aussi."
                 </p>
                 <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
-                <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit>"Enregistrer"</button>
+                <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit><Busy busy=busy />"Enregistrer"</button>
             </div>
         </BottomSheet>
     }

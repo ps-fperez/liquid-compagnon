@@ -6,6 +6,8 @@ use lc_shared_dto::{ErrorDto, NaiveDate, PricingIssueDto, PricingIssueKindDto, Q
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 
+use crate::components::toast;
+
 /// Résultat d'un chargement : `None` tant qu'il est en cours.
 pub type Loaded<T> = RwSignal<Option<Result<T, ErrorDto>>>;
 
@@ -40,7 +42,11 @@ pub fn run_action<T, Fut>(
     spawn_local(async move {
         match action.await {
             Ok(value) => on_success(value),
-            Err(failure) => error.set(Some(failure.message)),
+            Err(failure) => {
+                // Visible même si le message sous le formulaire est hors de l'écran.
+                toast::error(failure.message.clone());
+                error.set(Some(failure.message));
+            }
         }
         busy.set(false);
     });
