@@ -1,12 +1,14 @@
 //! Budget : revenus (salaire, revenus ponctuels), charges fixes récurrentes, dépenses ponctuelles
 //! et leurs catégories.
 
+mod allowance;
 mod calculator;
 mod category;
 mod charge;
 mod expense;
 mod income;
 
+pub use allowance::{AllowanceSources, Pace, Period, SpendingAllowance};
 pub use calculator::BudgetCalculator;
 pub use category::Category;
 pub use charge::{Debit, Periodicity, RecurringCharge};

@@ -1,6 +1,8 @@
+use super::allowance::{AllowanceSources, SpendingAllowance};
 use super::{Expense, OneOffIncome, RecurringCharge, SalaryEntry};
-use crate::transfer::{Schedule, Transfer};
-use crate::{CategoryId, Money, Month};
+use crate::transfer::{Endpoint, Schedule, Transfer};
+use crate::{AccountId, CategoryId, Money, Month};
+use chrono::NaiveDate;
 
 /// Calculs budgétaires sur un mois : revenus, charges, dépenses et capacité d'épargne.
 #[derive(Debug, Clone, Copy)]
@@ -10,6 +12,8 @@ pub struct BudgetCalculator<'a> {
     charges: &'a [RecurringCharge],
     expenses: &'a [Expense],
     transfers: &'a [Transfer],
+    /// Comptes courants : le « porte-monnaie » du foyer pour le classement des virements.
+    checking: &'a [AccountId],
 }
 
 impl<'a> BudgetCalculator<'a> {
@@ -28,6 +32,7 @@ impl<'a> BudgetCalculator<'a> {
             charges,
             expenses,
             transfers: &[],
+            checking: &[],
         }
     }
 
@@ -38,24 +43,99 @@ impl<'a> BudgetCalculator<'a> {
         self
     }
 
+    /// Déclare les comptes courants (spec spending-allowance, D2).
+    pub fn with_checking(mut self, checking: &'a [AccountId]) -> Self {
+        self.checking = checking;
+        self
+    }
+
+    fn is_checking(&self, endpoint: Endpoint) -> bool {
+        endpoint
+            .account()
+            .is_some_and(|id| self.checking.contains(&id))
+    }
+
+    /// Compte suivi qui n'est pas un compte courant (livret, placement, épargne salariale).
+    fn is_savings(&self, endpoint: Endpoint) -> bool {
+        endpoint.account().is_some() && !self.is_checking(endpoint)
+    }
+
+    /// Somme du mois des virements retenus par `keep`, au montant envoyé ou reçu.
+    fn transfers_for(
+        &self,
+        month: Month,
+        keep: impl Fn(&Transfer) -> bool,
+        amount: fn(&Transfer) -> Money,
+    ) -> Money {
+        self.transfers
+            .iter()
+            .filter(|t| keep(t))
+            .map(|t| amount(t).times(occurrences(t.schedule(), month)))
+            .sum()
+    }
+
     /// Virements du mois vers un compte hors patrimoine (montants envoyés).
     pub fn external_out_for(&self, month: Month) -> Money {
-        self.transfers
-            .iter()
-            .filter(|t| t.to().is_external() && !t.from().is_external())
-            .map(|t| t.sent().times(occurrences(t.schedule(), month)))
-            .sum()
+        self.transfers_for(
+            month,
+            |t| t.to().is_external() && !t.from().is_external(),
+            Transfer::sent,
+        )
     }
 
-    /// Virements du mois depuis un compte hors patrimoine (montants reçus).
+    /// Virements du mois reçus de l'extérieur sur un compte courant (montants reçus). Un virement
+    /// de l'extérieur vers une épargne est de l'épargne financée par les revenus, pas un revenu.
     pub fn external_in_for(&self, month: Month) -> Money {
-        self.transfers
-            .iter()
-            .filter(|t| t.from().is_external() && !t.to().is_external())
-            .map(|t| t.received().times(occurrences(t.schedule(), month)))
-            .sum()
+        self.transfers_for(
+            month,
+            |t| t.from().is_external() && self.is_checking(t.to()),
+            Transfer::received,
+        )
     }
 
+    /// Épargne programmée du mois : d'un compte courant ou de l'extérieur vers une épargne.
+    pub fn scheduled_savings_for(&self, month: Month) -> Money {
+        self.transfers_for(
+            month,
+            |t| (self.is_checking(t.from()) || t.from().is_external()) && self.is_savings(t.to()),
+            Transfer::sent,
+        )
+    }
+
+    /// Rapatriements du mois : d'une épargne vers un compte courant.
+    pub fn repatriated_for(&self, month: Month) -> Money {
+        self.transfers_for(
+            month,
+            |t| self.is_savings(t.from()) && self.is_checking(t.to()),
+            Transfer::received,
+        )
+    }
+
+    /// Virements du mois d'un compte courant vers l'extérieur.
+    pub fn checking_external_out_for(&self, month: Month) -> Money {
+        self.transfers_for(
+            month,
+            |t| self.is_checking(t.from()) && t.to().is_external(),
+            Transfer::sent,
+        )
+    }
+
+    /// Reste à dépenser du mois `month`, vu le jour `today`.
+    pub fn allowance(&self, month: Month, today: NaiveDate) -> SpendingAllowance {
+        SpendingAllowance::compute(
+            AllowanceSources {
+                month,
+                income: self.total_income_for(month),
+                external_in: self.external_in_for(month),
+                repatriated: self.repatriated_for(month),
+                fixed_charges: self.fixed_charges_for(month),
+                scheduled_savings: self.scheduled_savings_for(month),
+                external_out: self.checking_external_out_for(month),
+                spent: self.expenses_for(month),
+            },
+            today,
+        )
+    }
     /// Équivalent mensuel net des virements récurrents avec l'extérieur actifs en `month`
     /// (sorties − entrées ; un virement annuel compte pour 1/12).
     pub fn recurring_external_net_for(&self, month: Month) -> Money {
@@ -87,7 +167,7 @@ impl<'a> BudgetCalculator<'a> {
                 let factor = monthly.amount();
                 match (t.from().is_external(), t.to().is_external()) {
                     (false, true) => Some(t.sent().times(factor)),
-                    (true, false) => Some(-t.received().times(factor)),
+                    (true, false) if self.is_checking(t.to()) => Some(-t.received().times(factor)),
                     _ => None,
                 }
             })
@@ -443,6 +523,85 @@ mod tests {
             calculator.savings_capacity(month(2026, 10)),
             Money::new(dec!(1780)),
             "3 340 − 1 560"
+        );
+    }
+
+    // Spec spending-allowance : « Mois type », « Rapatriement », « Virement payé par l'épargne »,
+    // « Épargne depuis un compte non suivi »
+    #[test]
+    fn allowance_classifies_transfers_by_account_nature() {
+        use crate::transfer::{Endpoint, Schedule, Transfer};
+        use crate::{ExternalId, TransferId};
+        use chrono::{TimeZone, Utc};
+        use rust_decimal_macros::dec;
+
+        let checking_id = AccountId::generate();
+        let checking = Endpoint::Account(checking_id);
+        let ldds = Endpoint::Account(AccountId::generate());
+        let livret_a = Endpoint::Account(AccountId::generate());
+        let joint = Endpoint::External(ExternalId::generate());
+        let credit = Endpoint::External(ExternalId::generate());
+        let untracked = Endpoint::External(ExternalId::generate());
+        let monthly = Schedule::Monthly {
+            day: 1,
+            from: month(2026, 1),
+            until: None,
+        };
+        let once = Schedule::Once {
+            date: NaiveDate::from_ymd_opt(2026, 10, 18).unwrap(),
+        };
+        let transfer = |from, to, amount: Decimal, schedule| {
+            Transfer::new(
+                TransferId::generate(),
+                from,
+                to,
+                Money::new(amount),
+                Money::new(amount),
+                None,
+                schedule,
+                Utc.with_ymd_and_hms(2026, 10, 1, 9, 0, 0).unwrap(),
+            )
+            .unwrap()
+        };
+        let salaries =
+            [
+                SalaryEntry::new(SalaryId::generate(), month(2026, 1), Money::new(dec!(3340)))
+                    .unwrap(),
+            ];
+        let checking_ids = [checking_id];
+        let october = month(2026, 10);
+        let today = NaiveDate::from_ymd_opt(2026, 10, 1).unwrap();
+
+        let typical = [
+            transfer(checking, joint, dec!(1560), monthly),
+            transfer(checking, credit, dec!(686), monthly),
+            transfer(checking, ldds, dec!(850), monthly),
+        ];
+        let calculator = BudgetCalculator::new(&salaries, &[], &[], &[])
+            .with_transfers(&typical)
+            .with_checking(&checking_ids);
+        assert_eq!(
+            calculator.allowance(october, today).envelope,
+            Money::new(dec!(244))
+        );
+
+        let mut more = typical.to_vec();
+        more.push(transfer(ldds, checking, dec!(100), once));
+        more.push(transfer(ldds, joint, dec!(600), once));
+        more.push(transfer(untracked, livret_a, dec!(200), monthly));
+        let calculator = BudgetCalculator::new(&salaries, &[], &[], &[])
+            .with_transfers(&more)
+            .with_checking(&checking_ids);
+        let allowance = calculator.allowance(october, today);
+        assert_eq!(allowance.sources.repatriated, Money::new(dec!(100)));
+        assert_eq!(allowance.sources.scheduled_savings, Money::new(dec!(1050)));
+        assert_eq!(allowance.sources.external_out, Money::new(dec!(2246)));
+        assert_eq!(allowance.envelope, Money::new(dec!(144)), "244 + 100 − 200");
+        assert_eq!(calculator.external_in_for(october), Money::ZERO);
+        assert_eq!(
+            calculator.savings_capacity(october),
+            Money::new(dec!(1094)),
+            "3 340 − 1 560 − 686 : l'épargne depuis le compte non suivi n'est pas un revenu"
         );
     }
 }

@@ -14,10 +14,10 @@ use crate::components::Busy;
 use crate::components::amount_hint;
 use crate::components::style::{BTN_DANGER, BTN_GHOST, BTN_PRIMARY, LABEL, SECTION_TITLE};
 use crate::components::toast;
-use crate::components::{Amount, BottomSheet, Card, EmptyState, Field};
+use crate::components::{Amount, BottomSheet, Card, EmptyState, Field, cascade};
 use crate::format;
 use crate::icons::{Icon, IconName};
-use crate::util::{Loaded, load, run_action, today};
+use crate::util::{Loaded, load, run_action, today, undo};
 
 const MONTHS: [&str; 12] = [
     "janvier",
@@ -296,12 +296,20 @@ fn TransferForm(
             label: Some(label.get_untracked()).filter(|l| !l.trim().is_empty()),
             schedule,
         };
-        run_action(busy, error, api::save_transfer(input), move |_: String| {
-            toast::success(if recurring {
+        run_action(busy, error, api::save_transfer(input), move |id: String| {
+            let message = if recurring {
                 "Virement programmé"
             } else {
                 "Virement enregistré"
-            });
+            };
+            if editing {
+                toast::success(message);
+            } else {
+                toast::success_with_undo(
+                    message,
+                    undo(api::delete_transfer, id, "Virement annulé", on_saved),
+                );
+            }
             open.set(false);
             on_saved.run(());
         });
@@ -607,7 +615,7 @@ pub fn MovementFeed(
             } else {
                 view! {
                     <Card class="flex flex-col p-2">
-                        {movements.into_iter().map(|movement| {
+                        {movements.into_iter().enumerate().map(|(index, movement)| {
                             let (icon, tone, fallback) = movement_look(movement.kind);
                             let direction = match movement.kind {
                                 MovementKindDto::TransferIn => "de ",
@@ -615,7 +623,7 @@ pub fn MovementFeed(
                             };
                             let counterpart = movement.counterpart.map(|name| format!(" · {direction}{name}"));
                             view! {
-                                <div class="flex min-h-14 items-center gap-3 px-2">
+                                <div class="flex min-h-14 animate-rise items-center gap-3 px-2" style=cascade(index)>
                                     <span class=format!("flex size-9 shrink-0 items-center justify-center rounded-full bg-surface-raised {tone}")>
                                         <Icon name=icon class="size-5" />
                                     </span>

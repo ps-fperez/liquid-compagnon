@@ -15,7 +15,7 @@ use crate::components::{
     amount_hint,
 };
 use crate::format;
-use crate::util::{Loaded, run_action, today};
+use crate::util::{Loaded, run_action, today, undo};
 
 use super::account_choice::{AccountChoice, AccountSelection, resolve};
 
@@ -96,7 +96,7 @@ pub fn ExpensesSection(
                                     let category = names.with(|n| n.get(&expense.category_id).cloned().unwrap_or_default());
                                     view! {
                                         <button
-                                            class="flex min-h-12 items-center gap-3 rounded-xl px-2 text-left active:bg-surface-raised"
+                                            class="flex min-h-12 animate-rise items-center gap-3 rounded-xl px-2 text-left active:bg-surface-raised"
                                             on:click=move |_| editing.set(Some(open.clone()))
                                         >
                                             <span class="flex min-w-0 flex-1 flex-col">
@@ -192,12 +192,18 @@ pub fn ExpenseSheet(
             label: label_text,
             account_id: resolve(account.get_untracked(), &checking.get_untracked()),
         };
-        run_action(busy, error, api::save_expense(input), move |_: String| {
-            toast::success(if editing {
-                format!("Dépense modifiée : {}", format::amount(parsed_amount))
+        run_action(busy, error, api::save_expense(input), move |id: String| {
+            if editing {
+                toast::success(format!(
+                    "Dépense modifiée : {}",
+                    format::amount(parsed_amount)
+                ));
             } else {
-                format!("Dépense de {} enregistrée", format::amount(parsed_amount))
-            });
+                toast::success_with_undo(
+                    format!("Dépense de {} enregistrée", format::amount(parsed_amount)),
+                    undo(api::delete_expense, id, "Dépense annulée", on_saved),
+                );
+            }
             // Une nouvelle saisie repart d'une feuille vide.
             if !editing {
                 amount.set(String::new());

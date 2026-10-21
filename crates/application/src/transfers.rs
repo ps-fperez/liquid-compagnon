@@ -490,4 +490,65 @@ mod tests {
         );
         assert!(neutral.account_at(pei, 12).unwrap() > Money::new(dec!(1493.30)));
     }
+
+    // Spec spending-allowance : « Mois type » (synthèse du budget) et catégories du mois
+    #[test]
+    fn budget_summary_carries_the_spending_allowance() {
+        use crate::budget::ExpenseInput;
+
+        let env = TestEnv::new();
+        let budget = env.budget();
+        budget.ensure_default_categories().unwrap();
+        let today = env.clock.today();
+        budget
+            .upsert_salary(None, Month::of(today), Money::new(dec!(3340)))
+            .unwrap();
+        let checking = create(&env, "Compte courant", AccountType::Checking);
+        let ldds = create(&env, "LDDS", AccountType::Ldds);
+        let transfers = env.transfers();
+        let joint = transfers.create_external_account("Compte joint").unwrap();
+        let monthly = Schedule::Monthly {
+            day: 1,
+            from: Month::of(today),
+            until: None,
+        };
+        for (to, amount) in [
+            (Endpoint::External(joint), dec!(1560)),
+            (Endpoint::Account(ldds), dec!(850)),
+        ] {
+            transfers
+                .create_transfer(TransferInput {
+                    from: Endpoint::Account(checking),
+                    to,
+                    sent: Money::new(amount),
+                    received: None,
+                    label: None,
+                    schedule: monthly,
+                })
+                .unwrap();
+        }
+        let categories = budget.categories(false).unwrap();
+        for (category, amount) in [(0, dec!(20)), (1, dec!(34.50)), (0, dec!(22))] {
+            budget
+                .add_expense(ExpenseInput {
+                    amount: Money::new(amount),
+                    category: categories[category].id(),
+                    date: None,
+                    label: None,
+                    account: None,
+                })
+                .unwrap();
+        }
+
+        let summary = budget.summary(None).unwrap();
+        assert_eq!(summary.allowance.envelope, Money::new(dec!(930)));
+        assert_eq!(summary.allowance.remaining, Money::new(dec!(853.50)));
+        assert_eq!(
+            summary.top_categories,
+            vec![
+                (categories[0].id(), Money::new(dec!(42))),
+                (categories[1].id(), Money::new(dec!(34.50))),
+            ]
+        );
+    }
 }

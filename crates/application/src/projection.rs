@@ -73,7 +73,9 @@ impl ProjectionUseCases {
         let budget = summarize(
             self.budget.as_ref(),
             self.transfers.as_ref(),
+            self.accounts.as_ref(),
             Month::of(today),
+            today,
         )?;
         let mut input = ProjectionInput::from_accounts(
             valued

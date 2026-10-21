@@ -13,6 +13,7 @@ use lc_shared_dto::{
 use leptos::prelude::*;
 use leptos_router::hooks::use_query_map;
 
+use super::allowance::AllowanceRow;
 use crate::api;
 use crate::components::style::{BTN_ICON, BTN_SECONDARY};
 use crate::components::{Amount, Card, ErrorBanner, Skeleton};
@@ -149,6 +150,9 @@ fn SummaryCard(summary: BudgetSummaryDto) -> impl IntoView {
             {(capacity.is_sign_negative() && !capacity.is_zero()).then(|| view! {
                 <p class="text-sm text-loss">"Vos charges et dépenses dépassent votre salaire."</p>
             })}
+            <div class="border-t border-line pt-3">
+                <AllowanceRow summary=summary.clone() />
+            </div>
         </Card>
     }
 }

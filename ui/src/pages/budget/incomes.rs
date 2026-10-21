@@ -11,7 +11,7 @@ use crate::components::style::{BTN_DANGER, BTN_GHOST, BTN_PRIMARY, SECTION_TITLE
 use crate::components::toast;
 use crate::components::{Amount, BottomSheet, Card, EmptyState, Field};
 use crate::format;
-use crate::util::{Loaded, current_month, run_action, today};
+use crate::util::{Loaded, current_month, run_action, today, undo};
 
 use super::account_choice::{AccountChoice, AccountSelection, resolve};
 
@@ -230,8 +230,20 @@ fn IncomeSheet(
             busy,
             error,
             api::upsert_one_off_income(input),
-            move |_: String| {
-                toast::success("Revenu ponctuel enregistré");
+            move |id: String| {
+                if editing {
+                    toast::success("Revenu ponctuel modifié");
+                } else {
+                    toast::success_with_undo(
+                        "Revenu ponctuel enregistré",
+                        undo(
+                            api::delete_one_off_income,
+                            id,
+                            "Revenu ponctuel annulé",
+                            on_saved,
+                        ),
+                    );
+                }
                 if !editing {
                     label.set(String::new());
                     amount.set(String::new());

@@ -50,6 +50,8 @@ fn is_active(href: &str, path: &str) -> bool {
 pub fn BottomNav() -> impl IntoView {
     let location = use_location();
     let quick_add = RwSignal::new(false);
+    // Halo au toucher du bouton + (relancé à chaque appui).
+    let halo = RwSignal::new(0_u32);
 
     let tab = move |tab: &'static Tab| {
         let active = move || is_active(tab.href, &location.pathname.get());
@@ -80,10 +82,14 @@ pub fn BottomNav() -> impl IntoView {
                 {LEFT.iter().map(tab).collect_view()}
                 <div class="flex flex-1 justify-center">
                     <button
-                        class="-mt-6 flex size-16 items-center justify-center rounded-full bg-secondary text-ink animate-glow-pulse active:scale-95"
+                        class="relative -mt-6 flex size-16 items-center justify-center rounded-full bg-secondary text-ink animate-glow-pulse transition active:scale-95"
                         aria-label="Saisie rapide"
+                        on:pointerdown=move |_| halo.update(|n| *n += 1)
                         on:click=move |_| quick_add.set(true)
                     >
+                        {move || (halo.get() > 0).then(|| view! {
+                            <span class="pointer-events-none absolute inset-0 animate-halo rounded-full" data-press=halo.get()></span>
+                        })}
                         <Icon name=IconName::Plus class="size-8" />
                     </button>
                 </div>

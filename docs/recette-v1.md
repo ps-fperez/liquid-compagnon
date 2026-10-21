@@ -163,7 +163,7 @@ Légende de couverture :
 
 | Scénario | Couverture automatique | Téléphone |
 |---|---|---|
-| Build de main | CI : `latest.json` publié avec l'APK, versionCode 100000 + run | [ ] Release « dernier-build » : APK + `latest.json` |
+| Build de main | CI : `latest.json` publié avec l'APK, versionCode 100000 + run | [x] Release « dernier-build » : APK + `latest.json` (d703a2b, 21/10/2026) |
 | Version plus récente | app : `newer_build_is_proposed` | [x] Build 18 installé, build 19 proposé (validé le 21/10/2026) |
 | Déjà à jour | app : `newer_build_is_proposed` | [ ] Réglages › Mises à jour : « Application à jour » |
 | Build local | app : `local_builds_never_update` · e2e 10 | — |
@@ -194,6 +194,22 @@ Légende de couverture :
 | Abonnement prélevé | dom : `checking_follows_debits_and_transfers_after_the_reference` · app : `debited_charge_lowers_the_checking_balance_after_its_day` | [ ] Abonnement prélevé le 5 |
 | Jour absent du mois | dom : `monthly_occurrences_clamp_to_the_last_day` | — |
 | Nouvelle charge | e2e 13 (compte courant proposé, jour du prélèvement) | — |
+## Reste à dépenser, accueil, notifications (spending-allowance, home-dashboard, motion-feedback, v0.3)
+
+| Scénario | Couverture automatique | Téléphone |
+|---|---|---|
+| Mois type | dom : `allowance_classifies_transfers_by_account_nature`, `envelope_subtracts_charges_savings_and_external_outflows` · app : `budget_summary_carries_the_spending_allowance` | [ ] Enveloppe proche des 250 € gardés sur le compte perso |
+| Rapatriement | dom : `allowance_classifies_transfers_by_account_nature` · e2e 14 | — |
+| Virement payé par l'épargne | dom : `allowance_classifies_transfers_by_account_nature` | — |
+| Épargne depuis un compte non suivi | dom : `allowance_classifies_transfers_by_account_nature` | — |
+| Rythme élevé / Dans le rythme | dom : `fast_pace_with_daily_budget_and_projection`, `on_track_and_exceeded` · e2e 14 (dépassé) | [ ] Couleur et libellé de l'état |
+| Projection de fin de mois | dom : `fast_pace_with_daily_budget_and_projection` · e2e 14 | — |
+| Chiffre du jour | e2e 14 | [ ] Carte sous le patrimoine, jauge et repère du jour |
+| Détail en un geste | e2e 14 | — |
+| Aucun revenu saisi | e2e 2 | — |
+| Annuler une dépense | e2e 14 | [ ] « Annuler » à portée du pouce |
+| Une seule notification | — | [ ] Deux saisies de suite : une seule notification |
+| Animations réduites | CSS `prefers-reduced-motion` · `count_up` | [ ] Supprimer les animations : montants affichés directement |
 ## Anomalies
 | # | Écran | Description | Statut |
 |---|---|---|---|

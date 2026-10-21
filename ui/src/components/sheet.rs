@@ -12,6 +12,19 @@ pub fn BottomSheet(
     children: ChildrenFn,
 ) -> impl IntoView {
     let title = StoredValue::new(title);
+    // Compte des feuilles ouvertes : la notification se place alors en haut.
+    Effect::new(move |was_open: Option<bool>| {
+        let is_open = open.get();
+        if was_open.unwrap_or(false) != is_open {
+            super::toast::sheet_visible(is_open);
+        }
+        is_open
+    });
+    on_cleanup(move || {
+        if open.try_get_untracked().unwrap_or(false) {
+            super::toast::sheet_visible(false);
+        }
+    });
     view! {
         <Show when=move || open.get()>
             <div class="fixed inset-0 z-40 flex flex-col justify-end">

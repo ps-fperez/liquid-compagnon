@@ -2,7 +2,7 @@ use leptos::prelude::*;
 use leptos_router::components::{Route, Router, Routes};
 use leptos_router::path;
 
-use crate::components::{LoadingBar, ToastHost, loading, toast};
+use crate::components::{LoadingBar, PageTransition, ToastHost, loading, toast};
 use crate::pages::{
     AccountDetailPage, AccountsPage, BudgetPage, DashboardPage, Gallery, NotFound, ProjectionPage,
     SettingsPage,
@@ -30,7 +30,8 @@ pub fn App() -> impl IntoView {
         <Router>
             <SessionGate>
                 <Header />
-                <main class="mx-auto flex max-w-md flex-col gap-4 px-4 pt-2 pb-32">
+                <main class="mx-auto max-w-md px-4 pt-2 pb-32">
+                    <PageTransition>
                     <Routes fallback=|| view! { <NotFound /> }>
                         <Route path=path!("/") view=DashboardPage />
                         <Route path=path!("/comptes") view=AccountsPage />
@@ -40,6 +41,7 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/reglages") view=SettingsPage />
                         <Route path=path!("/galerie") view=Gallery />
                     </Routes>
+                    </PageTransition>
                 </main>
                 <BottomNav />
                 <UpdateWatcher />

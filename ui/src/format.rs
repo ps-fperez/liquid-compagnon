@@ -166,6 +166,13 @@ pub fn month_label(iso_month: &str) -> String {
         .unwrap_or_else(|| iso_month.to_string())
 }
 
+/// « octobre » à partir de « 2026-10 ».
+pub fn month_name(iso_month: &str) -> String {
+    parse_iso_month(iso_month)
+        .map(|(_, month)| MONTHS[month as usize - 1].to_string())
+        .unwrap_or_else(|| iso_month.to_string())
+}
+
 /// « oct. 26 » à partir de « 2026-10 ».
 pub fn month_short(iso_month: &str) -> String {
     parse_iso_month(iso_month)

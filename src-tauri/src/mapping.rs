@@ -11,7 +11,8 @@ use lc_domain::account::{
     Account, AccountKind, AccountType, AssetRef, CurrencyCode, QuoteSource, Scenario, ScenarioRates,
 };
 use lc_domain::budget::{
-    Category, Expense, OneOffIncome, Periodicity, RecurringCharge, SalaryEntry,
+    Category, Expense, OneOffIncome, Pace, Period, Periodicity, RecurringCharge, SalaryEntry,
+    SpendingAllowance,
 };
 use lc_domain::ledger::{Movement, MovementKind};
 use lc_domain::transfer::{Endpoint, ExternalAccount, Schedule, Transfer};
@@ -177,7 +178,7 @@ fn scenario_rates_dto(rates: &ScenarioRates) -> ScenarioRatesDto {
     }
 }
 
-pub fn budget_summary_dto(summary: &BudgetSummary) -> BudgetSummaryDto {
+pub fn budget_summary_dto(summary: &BudgetSummary, categories: &[Category]) -> BudgetSummaryDto {
     BudgetSummaryDto {
         month: summary.month.to_string(),
         salary: summary.salary.amount(),
@@ -189,10 +190,56 @@ pub fn budget_summary_dto(summary: &BudgetSummary) -> BudgetSummaryDto {
         savings_capacity: summary.savings_capacity.amount(),
         external_out: summary.external_out.amount(),
         external_in: summary.external_in.amount(),
+        allowance: allowance_dto(&summary.allowance),
+        top_categories: summary
+            .top_categories
+            .iter()
+            .map(|(id, amount)| CategoryAmountDto {
+                id: id.to_string(),
+                name: categories
+                    .iter()
+                    .find(|c| c.id() == *id)
+                    .map_or_else(String::new, |c| c.name().to_string()),
+                amount: amount.amount(),
+            })
+            .collect(),
     }
 }
 
-pub fn dashboard_dto(dashboard: &Dashboard, export_reminder_due: bool) -> DashboardDto {
+fn allowance_dto(allowance: &SpendingAllowance) -> AllowanceDto {
+    let s = &allowance.sources;
+    AllowanceDto {
+        income: s.income.amount(),
+        external_in: s.external_in.amount(),
+        repatriated: s.repatriated.amount(),
+        fixed_charges: s.fixed_charges.amount(),
+        scheduled_savings: s.scheduled_savings.amount(),
+        external_out: s.external_out.amount(),
+        spent: s.spent.amount(),
+        envelope: allowance.envelope.amount(),
+        remaining: allowance.remaining.amount(),
+        today: match allowance.period {
+            Period::Current { day } => Some(day),
+            Period::Past | Period::Future => None,
+        },
+        days_in_month: allowance.days_in_month,
+        days_left: allowance.days_left,
+        per_day: allowance.per_day.map(|m| m.amount()),
+        daily_spending: allowance.daily_spending.map(|m| m.amount()),
+        projected_end: allowance.projected_end.map(|m| m.amount()),
+        pace: match allowance.pace {
+            Pace::OnTrack => PaceDto::OnTrack,
+            Pace::Fast => PaceDto::Fast,
+            Pace::Exceeded => PaceDto::Exceeded,
+        },
+    }
+}
+
+pub fn dashboard_dto(
+    dashboard: &Dashboard,
+    categories: &[Category],
+    export_reminder_due: bool,
+) -> DashboardDto {
     DashboardDto {
         total: dashboard.total.amount(),
         variation: dashboard.variation.map(variation_dto),
@@ -210,7 +257,7 @@ pub fn dashboard_dto(dashboard: &Dashboard, export_reminder_due: bool) -> Dashbo
                 provenance: provenance_dto(line.valuation.provenance),
             })
             .collect(),
-        budget: budget_summary_dto(&dashboard.budget),
+        budget: budget_summary_dto(&dashboard.budget, categories),
         history: dashboard
             .history
             .iter()

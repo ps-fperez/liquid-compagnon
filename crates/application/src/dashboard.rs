@@ -144,7 +144,9 @@ impl DashboardUseCases {
             budget: summarize(
                 self.budget.as_ref(),
                 self.transfers.as_ref(),
+                self.accounts.as_ref(),
                 Month::of(today),
+                today,
             )?,
             history: history(&snapshots),
             pricing_issues,

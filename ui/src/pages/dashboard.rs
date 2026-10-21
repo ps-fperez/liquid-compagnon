@@ -1,4 +1,4 @@
-//! Tableau de bord : patrimoine total, comptes, budget du mois, évolution.
+//! Tableau de bord (spec home-dashboard) : patrimoine total, reste à dépenser, comptes, évolution.
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -8,11 +8,12 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::components::A;
 
+use super::allowance::AllowanceCard;
 use crate::api;
 use crate::charts::{AllocationBar, AllocationSegment, LineChart, Series, to_f64};
 use crate::components::style::{BTN_ICON, SECTION_TITLE};
 use crate::components::{
-    Amount, Card, EmptyState, ErrorBanner, GlowCard, ProvenanceBadge, Skeleton,
+    Amount, Card, EmptyState, ErrorBanner, GlowCard, ProvenanceBadge, Skeleton, cascade,
 };
 use crate::components::{Notice, NoticeKind};
 use crate::format;
@@ -143,7 +144,7 @@ fn Overview(
                     <Icon name=IconName::Refresh class="size-5" />
                 </button>
             </div>
-            <Amount value=dashboard.total class="mt-1 block text-4xl font-semibold tracking-tight" />
+            <Amount value=dashboard.total animate=true class="mt-1 block text-4xl font-semibold tracking-tight" />
             // Une variation n'a de sens que par rapport à une référence non nulle (pas au tout premier mois).
             {dashboard.variation.filter(|v| v.percent.is_some()).map(|variation| view! {
                 <p class="mt-2 flex items-center gap-2 text-sm">
@@ -157,6 +158,8 @@ fn Overview(
             })}
             {has_accounts.then(|| view! { <div class="mt-5"><AllocationBar segments=segments /></div> })}
         </GlowCard>
+
+        <AllowanceCard summary=dashboard.budget />
 
         {issues.into_iter().map(|message| {
             let key = format!("cours.{message}");
@@ -181,7 +184,8 @@ fn Overview(
                         {dashboard
                             .accounts
                             .into_iter()
-                            .map(|line| view! { <AccountRow line=line flashes=flashes /> })
+                            .enumerate()
+                            .map(|(index, line)| view! { <AccountRow line=line index=index flashes=flashes /> })
                             .collect_view()}
                     </Card>
                 }
@@ -190,7 +194,7 @@ fn Overview(
                 view! {
                     <EmptyState
                         title="Ajoutez votre premier compte"
-                        body="Compte courant, Livret A, LDDS, PEA, PEI ou portefeuille crypto."
+                        body="Compte courant, livret, PEA, assurance-vie, épargne salariale ou portefeuille crypto."
                         action="Ajouter un compte"
                         href="/comptes?nouveau=1"
                     />
@@ -199,13 +203,16 @@ fn Overview(
             }}
         </section>
 
-        <MonthSummary dashboard_budget=dashboard.budget />
         <History points=dashboard.history on_snapshot=on_snapshot />
     }
 }
 
 #[component]
-fn AccountRow(line: AccountLineDto, flashes: RwSignal<HashMap<String, bool>>) -> impl IntoView {
+fn AccountRow(
+    line: AccountLineDto,
+    index: usize,
+    flashes: RwSignal<HashMap<String, bool>>,
+) -> impl IntoView {
     let id = line.id.clone();
     let flash = move || match flashes.with(|f| f.get(&id).copied()) {
         Some(true) => "animate-flash-gain",
@@ -215,7 +222,8 @@ fn AccountRow(line: AccountLineDto, flashes: RwSignal<HashMap<String, bool>>) ->
     view! {
         <A
             href=format!("/comptes/{}", line.id)
-            attr:class=move || format!("flex min-h-16 items-center gap-3 rounded-xl px-3 py-2 transition active:bg-surface-raised {}", flash())
+            attr:class=move || format!("flex min-h-16 animate-rise items-center gap-3 rounded-xl px-3 py-2 transition active:bg-surface-raised {}", flash())
+            attr:style=cascade(index)
         >
             <span class="size-2.5 shrink-0 rounded-full" style=format!("background-color: {}", line.color)></span>
             <span class="flex min-w-0 flex-1 flex-col items-start gap-1">
@@ -230,52 +238,6 @@ fn AccountRow(line: AccountLineDto, flashes: RwSignal<HashMap<String, bool>>) ->
                 </span>
             </span>
         </A>
-    }
-}
-
-#[component]
-fn MonthSummary(dashboard_budget: lc_shared_dto::BudgetSummaryDto) -> impl IntoView {
-    let budget = dashboard_budget;
-    let negative = budget.savings_capacity.is_sign_negative() && !budget.savings_capacity.is_zero();
-    let capacity_color = if negative {
-        "font-medium text-loss"
-    } else if budget.savings_capacity.is_zero() {
-        "font-medium"
-    } else {
-        "font-medium text-gain"
-    };
-    view! {
-        <section class="flex flex-col gap-2">
-            <div class="flex items-center justify-between">
-                <h2 class=SECTION_TITLE>{format!("Budget · {}", format::month_label(&budget.month))}</h2>
-                <A href="/budget" attr:class="text-sm text-secondary-light">"Détail"</A>
-            </div>
-            <div class="grid grid-cols-2 gap-2">
-                <Stat label="Revenus du mois" value=budget.total_income />
-                <Stat label="Charges fixes" value=budget.fixed_charges />
-                <Stat label="Dépenses du mois" value=budget.expenses />
-                <div class=format!(
-                    "flex flex-col gap-1 rounded-2xl border p-3 {}",
-                    if negative { "border-loss/40 bg-loss/5" } else { "border-line bg-surface" },
-                )>
-                    <span class="text-xs text-muted">"Capacité d'épargne"</span>
-                    <Amount value=budget.savings_capacity class=capacity_color />
-                </div>
-            </div>
-            {negative.then(|| view! {
-                <p class="px-1 text-sm text-loss">"Vos charges et dépenses dépassent votre salaire."</p>
-            })}
-        </section>
-    }
-}
-
-#[component]
-fn Stat(label: &'static str, value: Decimal) -> impl IntoView {
-    view! {
-        <div class="flex flex-col gap-1 rounded-2xl border border-line bg-surface p-3">
-            <span class="text-xs text-muted">{label}</span>
-            <Amount value=value class="font-medium" />
-        </div>
     }
 }
 

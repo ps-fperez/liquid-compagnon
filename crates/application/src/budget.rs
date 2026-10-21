@@ -1,12 +1,13 @@
 //! Revenus, charges fixes, dépenses ponctuelles, catégories et synthèse budgétaire.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::{DateTime, NaiveDate, Utc};
-use lc_domain::account::AccountType;
+use lc_domain::account::{Account, AccountType};
 use lc_domain::budget::{
     BudgetCalculator, Category, Debit, Expense, OneOffIncome, Periodicity, RecurringCharge,
-    SalaryEntry,
+    SalaryEntry, SpendingAllowance,
 };
 use lc_domain::{
     AccountId, CategoryId, ChargeId, ExpenseId, IncomeId, Label, Money, Month, SalaryId, defaults,
@@ -30,6 +31,10 @@ pub struct BudgetSummary {
     /// Virements du mois reçus de comptes hors patrimoine.
     pub external_in: Money,
     pub savings_capacity: Money,
+    /// Reste à dépenser du mois (spec spending-allowance).
+    pub allowance: SpendingAllowance,
+    /// Trois catégories les plus dépensées du mois, de la plus grosse à la plus petite.
+    pub top_categories: Vec<(CategoryId, Money)>,
 }
 
 /// Dépenses d'un mois (éventuellement filtrées par catégorie), de la plus récente à la plus
@@ -77,7 +82,9 @@ pub struct ExpenseInput {
 pub(crate) fn summarize(
     repo: &dyn BudgetRepository,
     transfers: &dyn TransferRepository,
+    accounts: &dyn AccountRepository,
     month: Month,
+    today: NaiveDate,
 ) -> AppResult<BudgetSummary> {
     let (salaries, incomes, charges, expenses, transfers) = (
         repo.salaries()?,
@@ -86,8 +93,22 @@ pub(crate) fn summarize(
         repo.expenses()?,
         transfers.transfers()?,
     );
-    let calculator =
-        BudgetCalculator::new(&salaries, &incomes, &charges, &expenses).with_transfers(&transfers);
+    let checking: Vec<AccountId> = accounts
+        .list()?
+        .iter()
+        .filter(|a| a.account_type() == AccountType::Checking)
+        .map(Account::id)
+        .collect();
+    let calculator = BudgetCalculator::new(&salaries, &incomes, &charges, &expenses)
+        .with_transfers(&transfers)
+        .with_checking(&checking);
+    let mut by_category: HashMap<CategoryId, Money> = HashMap::new();
+    for expense in expenses.iter().filter(|e| e.month() == month) {
+        *by_category.entry(expense.category()).or_default() += expense.amount();
+    }
+    let mut top_categories: Vec<(CategoryId, Money)> = by_category.into_iter().collect();
+    top_categories.sort_by_key(|(_, amount)| std::cmp::Reverse(*amount));
+    top_categories.truncate(3);
     Ok(BudgetSummary {
         month,
         salary: calculator.salary_for(month),
@@ -99,6 +120,8 @@ pub(crate) fn summarize(
         external_out: calculator.external_out_for(month),
         external_in: calculator.external_in_for(month),
         savings_capacity: calculator.savings_capacity(month),
+        allowance: calculator.allowance(month, today),
+        top_categories,
     })
 }
 
@@ -131,7 +154,9 @@ impl BudgetUseCases {
         summarize(
             self.repo.as_ref(),
             self.transfers.as_ref(),
+            self.accounts.as_ref(),
             month.unwrap_or_else(|| self.current_month()),
+            self.clock.today(),
         )
     }
 

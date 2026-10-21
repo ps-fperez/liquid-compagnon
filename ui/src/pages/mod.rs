@@ -1,6 +1,7 @@
 //! Écrans de l'application.
 
 mod accounts;
+mod allowance;
 mod budget;
 mod dashboard;
 mod gallery;

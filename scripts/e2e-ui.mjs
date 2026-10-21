@@ -179,6 +179,7 @@ await click("Découvrir l'application");
 console.log("2. Tableau de bord vide");
 await waitForText("Patrimoine total");
 await waitForText("Ajoutez votre premier compte");
+await waitForText("Renseigner mon salaire"); // reste à dépenser sans revenu
 await shot("dashboard-vide");
 
 console.log("3. Création d'un Livret A");
@@ -199,8 +200,7 @@ await shot("livret-a");
 console.log("5. Tableau de bord alimenté");
 await click("Accueil");
 await waitForText("Livret A");
-const text = await bodyText();
-if (!text.includes("10 640,25 €")) await fail("le total du tableau de bord est incorrect");
+await waitForText("10\u00a0640,25\u00a0€"); // le total défile jusqu'à sa valeur
 await shot("dashboard");
 
 console.log("6. Verrouillage, mauvais PIN, déverrouillage");
@@ -467,6 +467,35 @@ await shot("budget-virements");
 // Virements entre comptes suivis : le patrimoine total ne bouge pas.
 await click("Accueil");
 await waitForText("12 054,85 €");
+console.log("14. Reste à dépenser et annulation d'une saisie");
+// 3 200 + 100 rapatriés − 1 330 de charges − 800 d'épargne programmée (Livret A, épargne
+// salariale) − 1 560 vers le compte joint = −390 ; moins 72,50 de dépenses.
+await waitForText("Reste à dépenser ·");
+await waitForText("Budget dépassé");
+await waitForText("−462,50\u00a0€");
+await shot("reste-a-depenser");
+await click("Détail du reste à dépenser");
+await waitForText("Enveloppe du mois");
+await waitForText("−390,00\u00a0€");
+await waitForText("Rapatriements d'épargne");
+await waitForText("+100,00\u00a0€");
+await waitForText("−800,00\u00a0€");
+await waitForText("dépassent vos revenus du mois de 390,00\u00a0€");
+await waitForText("Alimentation"); // où part l'argent
+await shot("reste-a-depenser-detail");
+await click("Fermer");
+await click("Saisie rapide");
+await click("Dépense");
+await fill("Montant", "18,40");
+await click("Alimentation");
+await waitForText("Dépense de 18,40\u00a0€ enregistrée");
+await shot("notification-annuler");
+await click("Annuler");
+await waitForText("Dépense annulée");
+await sleep(500);
+if ((await bodyText()).includes("18,40")) await fail("la dépense annulée est encore affichée");
+await click("Accueil");
+await waitForText("−462,50\u00a0€");
 ws.close();
 if (errors.length > 0) {
   console.error(`ÉCHEC : ${errors.length} erreur(s) dans la WebView`);

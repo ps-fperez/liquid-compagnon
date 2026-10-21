@@ -10,7 +10,9 @@ use super::quick_balance::QuickBalanceSheet;
 use super::transfers::{ExternalAccounts, TransferSheet};
 use crate::api;
 use crate::components::style::BTN_PRIMARY;
-use crate::components::{Amount, Card, EmptyState, ErrorBanner, ProvenanceBadge, Skeleton};
+use crate::components::{
+    Amount, Card, EmptyState, ErrorBanner, ProvenanceBadge, Skeleton, cascade,
+};
 use crate::components::{Notice, NoticeKind};
 use crate::icons::{Icon, IconName};
 use crate::util::{load, pricing_issue_message};
@@ -80,7 +82,7 @@ pub fn AccountsPage() -> impl IntoView {
                         view! { <Notice kind=NoticeKind::Warning message=message dismiss_key=key /> }
                     }).collect_view()}
                     <Card class="flex flex-col p-1">
-                        {list.accounts.into_iter().map(|account| view! { <AccountRow account=account /> }).collect_view()}
+                        {list.accounts.into_iter().enumerate().map(|(index, account)| view! { <AccountRow account=account index=index /> }).collect_view()}
                     </Card>
                     <QuickBalanceSheet open=balance_open accounts=savings on_saved=Callback::new(move |_| reload()) />
                 }
@@ -108,9 +110,9 @@ pub fn AccountsPage() -> impl IntoView {
 }
 
 #[component]
-fn AccountRow(account: AccountDto) -> impl IntoView {
+fn AccountRow(account: AccountDto, index: usize) -> impl IntoView {
     view! {
-        <A href=format!("/comptes/{}", account.id) attr:class="flex min-h-16 items-center gap-3 rounded-xl px-3 py-2 transition active:bg-surface-raised">
+        <A href=format!("/comptes/{}", account.id) attr:class="flex min-h-16 animate-rise items-center gap-3 rounded-xl px-3 py-2 transition active:bg-surface-raised" attr:style=cascade(index)>
             <span class="size-2.5 shrink-0 rounded-full" style=format!("background-color: {}", account.color)></span>
             <span class="flex min-w-0 flex-1 flex-col items-start gap-1">
                 <span class="truncate font-medium">{account.name}</span>

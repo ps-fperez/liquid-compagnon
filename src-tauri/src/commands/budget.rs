@@ -19,7 +19,8 @@ pub async fn budget_summary(
     blocking(unlocked(&state)?, move |services| {
         let month = input.month.as_deref().map(month).transpose()?;
         let summary = services.budget.summary(month).map_err(app_error)?;
-        Ok(mapping::budget_summary_dto(&summary))
+        let categories = services.budget.categories(true).map_err(app_error)?;
+        Ok(mapping::budget_summary_dto(&summary, &categories))
     })
     .await
 }

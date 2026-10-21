@@ -17,11 +17,14 @@ pub async fn get_dashboard(
         .dashboard(input.force_refresh)
         .await
         .map_err(app_error)?;
-    let reminder = blocking(services, |services| {
-        services.backup.export_reminder_due().map_err(app_error)
+    let (reminder, categories) = blocking(services, |services| {
+        Ok((
+            services.backup.export_reminder_due().map_err(app_error)?,
+            services.budget.categories(true).map_err(app_error)?,
+        ))
     })
     .await?;
-    Ok(mapping::dashboard_dto(&dashboard, reminder))
+    Ok(mapping::dashboard_dto(&dashboard, &categories, reminder))
 }
 
 #[tauri::command]

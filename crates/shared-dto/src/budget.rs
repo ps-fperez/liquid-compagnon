@@ -17,6 +17,46 @@ pub struct BudgetSummaryDto {
     /// Virements du mois reçus de comptes hors patrimoine.
     pub external_in: Decimal,
     pub savings_capacity: Decimal,
+    pub allowance: AllowanceDto,
+    /// Trois catégories les plus dépensées du mois.
+    pub top_categories: Vec<CategoryAmountDto>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PaceDto {
+    OnTrack,
+    Fast,
+    Exceeded,
+}
+
+/// Reste à dépenser d'un mois : composantes de l'enveloppe, reste, rythme.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AllowanceDto {
+    pub income: Decimal,
+    pub external_in: Decimal,
+    pub repatriated: Decimal,
+    pub fixed_charges: Decimal,
+    pub scheduled_savings: Decimal,
+    pub external_out: Decimal,
+    pub spent: Decimal,
+    pub envelope: Decimal,
+    pub remaining: Decimal,
+    /// Jour du mois pour le mois en cours, absent pour un autre mois.
+    pub today: Option<u32>,
+    pub days_in_month: u32,
+    pub days_left: u32,
+    pub per_day: Option<Decimal>,
+    pub daily_spending: Option<Decimal>,
+    pub projected_end: Option<Decimal>,
+    pub pace: PaceDto,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CategoryAmountDto {
+    pub id: String,
+    pub name: String,
+    pub amount: Decimal,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

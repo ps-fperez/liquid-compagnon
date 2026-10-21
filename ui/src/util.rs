@@ -2,7 +2,9 @@
 
 use std::future::Future;
 
-use lc_shared_dto::{ErrorDto, NaiveDate, PricingIssueDto, PricingIssueKindDto, QuoteSourceDto};
+use lc_shared_dto::{
+    ErrorDto, IdInput, NaiveDate, PricingIssueDto, PricingIssueKindDto, QuoteSourceDto,
+};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 
@@ -52,6 +54,31 @@ pub fn run_action<T, Fut>(
     });
 }
 
+/// Action « Annuler » d'une notification : supprime l'élément `id` par `delete`, confirme et
+/// recharge l'écran s'il est encore affiché.
+pub fn undo<Fut>(
+    delete: fn(IdInput) -> Fut,
+    id: String,
+    done: &'static str,
+    on_saved: Callback<()>,
+) -> impl Fn() + Send + Sync + 'static
+where
+    Fut: Future<Output = Result<(), ErrorDto>> + 'static,
+{
+    move || {
+        let id = id.clone();
+        spawn_local(async move {
+            match delete(IdInput { id }).await {
+                Ok(()) => {
+                    toast::info(done);
+                    let _ = on_saved.try_run(());
+                }
+                Err(failure) => toast::error(failure.message),
+            }
+        });
+    }
+}
+
 /// Couleurs proposées pour identifier un compte.
 pub const ACCOUNT_COLORS: [&str; 8] = [
     "#A855F7", "#C084FC", "#7C3AED", "#E879F9", "#3B82F6", "#60A5FA", "#38BDF8", "#22D3EE",
@@ -88,6 +115,14 @@ pub fn pricing_issue_message(issue: &PricingIssueDto) -> String {
             }
         }
     }
+}
+
+/// Fraction (0,25) en pourcentage (25) pour une largeur de jauge.
+pub fn to_percent(fraction: lc_shared_dto::Decimal) -> f64 {
+    use rust_decimal::prelude::ToPrimitive;
+    (fraction * lc_shared_dto::Decimal::ONE_HUNDRED)
+        .to_f64()
+        .unwrap_or(0.0)
 }
 
 /// Date du jour (fuseau du téléphone).
