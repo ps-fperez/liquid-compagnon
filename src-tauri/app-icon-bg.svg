@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Fond de l'icône adaptative Android : plein cadre (le lanceur applique sa propre forme),
+       dégradé sombre et halo violet sous la goutte. -->
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="72%">
+      <stop offset="0" stop-color="#1f0e3a"/>
+      <stop offset="0.6" stop-color="#0c0617"/>
+      <stop offset="1" stop-color="#05030a"/>
+    </radialGradient>
+    <filter id="halo" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="40"/>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <ellipse cx="512" cy="590" rx="170" ry="120" fill="#8b3dff" opacity="0.4" filter="url(#halo)"/>
+</svg>

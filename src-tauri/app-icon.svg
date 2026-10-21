@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <!-- Icône Liquid Compagnon : une goutte en forme de bouclier (la liquidité et la sécurité), à
+  <!-- Icône Liquid Compagnon (bureau ; Android : app-icon.json) : une goutte en forme de bouclier (la liquidité et la sécurité), à
        double paroi comme un coffre. La surface du liquide est une courbe de cours, avec ses
        hausses et ses baisses, orientée à la hausse et achevée sur un point lumineux (l'épargne
        qui grandit). Violet électrique sur noir, verre sombre, lumière qui vient du liquide. -->
@@ -28,9 +28,8 @@
       <stop offset="0.6" stop-color="#f0e2ff" stop-opacity="0.85"/>
       <stop offset="1" stop-color="#ffffff"/>
     </linearGradient>
-    <!-- Goutte-blason : pointe de goutte au centre, deux cornes d'écu en haut, ventre arrondi
-         jusqu'à la pointe basse -->
-    <path id="drop" d="M512 140 C536 196 572 268 612 318 C640 284 678 252 716 228 C744 320 772 440 768 568 C760 716 650 808 512 868 C374 808 264 716 256 568 C252 440 280 320 308 228 C346 252 384 284 412 318 C452 268 488 196 512 140 Z"/>
+    <!-- Goutte-bouclier : pointe en haut, pointes latérales, pointe adoucie en bas -->
+    <path id="drop" d="M512 176 C584 262 716 360 768 440 C756 640 650 792 512 868 C374 792 268 640 256 440 C308 360 440 262 512 176 Z"/>
     <clipPath id="inside"><use href="#drop"/></clipPath>
     <filter id="halo" x="-50%" y="-50%" width="200%" height="200%">
       <feGaussianBlur stdDeviation="28"/>
