@@ -164,12 +164,12 @@ Légende de couverture :
 | Scénario | Couverture automatique | Téléphone |
 |---|---|---|
 | Build de main | CI : `latest.json` publié avec l'APK, versionCode 100000 + run | [ ] Release « dernier-build » : APK + `latest.json` |
-| Version plus récente | app : `newer_build_is_proposed` | [ ] Installer le build N, publier N+1 : invitation au déverrouillage |
+| Version plus récente | app : `newer_build_is_proposed` | [x] Build 18 installé, build 19 proposé (validé le 21/10/2026) |
 | Déjà à jour | app : `newer_build_is_proposed` | [ ] Réglages › Mises à jour : « Application à jour » |
 | Build local | app : `local_builds_never_update` · e2e 10 | — |
 | Hors ligne | app : `feed_errors_are_reported` | [ ] Mode avion : aucune erreur au démarrage |
 | Report | — | [ ] « Plus tard » : plus d'invitation pour ce build, pastille sur l'engrenage |
-| Mise à jour réussie | infra : `verified_download_reports_progress` | [ ] « Mettre à jour » : progression, installeur Android, données intactes |
+| Mise à jour réussie | infra : `verified_download_reports_progress` | [x] Installation depuis l'app, données intactes (validé le 21/10/2026) |
 | Fichier altéré | infra : `altered_download_is_deleted` · app : `apk_must_come_from_the_app_releases` | — |
 | Autorisation manquante | — | [ ] Premier essai : réglage « Installer des applis inconnues » ouvert |
 | Vérification automatique désactivée | src-tauri : `automatic_checks_are_spaced_by_six_hours` | [ ] Option désactivée : pas d'invitation |

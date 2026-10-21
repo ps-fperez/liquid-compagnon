@@ -29,4 +29,4 @@
 
 - [x] 5.1 Parcours e2e étendu (compte courant, dépense rattachée, solde courant, section Mises à jour), `scripts/check.ps1`, `scripts/smoke.ps1`, `scripts/e2e.ps1` au vert
 - [x] 5.2 README (compte courant, mises à jour), `docs/recette-v1.md` complétée, `openspec validate`
-- [ ] 5.3 Push, CI verte, APK à installer une dernière fois à la main, puis build N+1 pour valider la mise à jour depuis l'application sur le téléphone
+- [x] 5.3 Push, CI verte, APK à installer une dernière fois à la main, puis build N+1 pour valider la mise à jour depuis l'application sur le téléphone
