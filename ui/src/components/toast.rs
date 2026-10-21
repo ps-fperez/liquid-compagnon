@@ -157,16 +157,16 @@ pub fn ToastHost() -> impl IntoView {
 #[component]
 fn ToastCard(toast: Toast) -> impl IntoView {
     let (icon, tone) = match toast.kind {
-        ToastKind::Success => (IconName::Check, "border-gain/40 text-gain shadow-glow-gain"),
-        ToastKind::Error => (IconName::Alert, "border-loss/40 text-loss shadow-glow-loss"),
-        ToastKind::Warning => (IconName::Alert, "border-amber-400/40 text-amber-300"),
+        ToastKind::Success => (IconName::Check, "border-gain/40 text-gain"),
+        ToastKind::Error => (IconName::Alert, "border-loss/40 text-loss"),
+        ToastKind::Warning => (IconName::Alert, "border-warn/40 text-warn"),
         ToastKind::Info => (IconName::Info, "border-secondary/40 text-secondary-light"),
     };
     let urgent = matches!(toast.kind, ToastKind::Error | ToastKind::Warning);
     let id = toast.id;
     view! {
         <div
-            class=format!("pointer-events-auto flex animate-toast-in items-center gap-3 rounded-2xl border bg-surface-raised/95 px-4 py-2 backdrop-blur {tone}")
+            class=format!("pointer-events-auto flex animate-toast-in items-center gap-3 rounded-[14px] border bg-surface-raised px-4 py-2 shadow-[0_10px_30px_-10px_rgb(0_0_0/0.7)] {tone}")
             role=if urgent { "alert" } else { "status" }
             aria-live=if urgent { "assertive" } else { "polite" }
         >
@@ -174,7 +174,7 @@ fn ToastCard(toast: Toast) -> impl IntoView {
             <p class="flex-1 py-1 text-sm text-ink">{toast.message}</p>
             {toast.action.map(|action| view! {
                 <button
-                    class="-my-1 min-h-11 shrink-0 rounded-xl px-3 text-sm font-medium text-primary-soft active:bg-primary/15"
+                    class="-my-1 min-h-11 shrink-0 rounded-xl px-3 text-sm font-semibold text-secondary-light active:bg-secondary/15"
                     on:click=move |_| {
                         dismiss(id);
                         (action.run)();

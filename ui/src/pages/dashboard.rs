@@ -14,7 +14,7 @@ use crate::api;
 use crate::charts::{AllocationBar, AllocationSegment, LineChart, Series, to_f64};
 use crate::components::style::{BTN_ICON, SECTION_TITLE};
 use crate::components::{
-    Amount, Card, EmptyState, ErrorBanner, GlowCard, ProvenanceBadge, Skeleton, cascade,
+    Amount, Card, EmptyState, ErrorBanner, HeroCard, ProvenanceBadge, Skeleton, cascade,
 };
 use crate::components::{Notice, NoticeKind};
 use crate::format;
@@ -144,7 +144,7 @@ fn Overview(
     let has_accounts = !dashboard.accounts.is_empty();
 
     view! {
-        <GlowCard>
+        <HeroCard class="gap-1">
             <div class="flex items-start justify-between">
                 <p class="text-sm text-muted">"Patrimoine total"</p>
                 <button
@@ -155,11 +155,11 @@ fn Overview(
                     <Icon name=IconName::Refresh class="size-5" />
                 </button>
             </div>
-            <Amount value=dashboard.total animate=true class="mt-1 block text-4xl font-semibold tracking-tight" />
+            <Amount value=dashboard.total animate=true whole=true class="block text-[34px] leading-tight font-bold tracking-tight" />
             // Une variation n'a de sens que par rapport à une référence non nulle (pas au tout premier mois).
             {dashboard.variation.filter(|v| v.percent.is_some()).map(|variation| view! {
-                <p class="mt-2 flex items-center gap-2 text-sm">
-                    <Amount value=variation.amount signed=true colored=true />
+                <p class="flex items-center gap-2 text-sm">
+                    <Amount value=variation.amount signed=true colored=true whole=true />
                     {variation.percent.map(|percent| {
                         let color = if percent.is_sign_negative() { "text-loss" } else { "text-gain" };
                         view! { <span class=color>{format::percent_signed(percent, 1)}</span> }
@@ -167,8 +167,8 @@ fn Overview(
                     <span class="text-muted">"ce mois-ci"</span>
                 </p>
             })}
-            {has_accounts.then(|| view! { <div class="mt-5"><AllocationBar segments=segments /></div> })}
-        </GlowCard>
+            {has_accounts.then(|| view! { <div class="mt-3"><AllocationBar segments=segments /></div> })}
+        </HeroCard>
 
         <AllowanceCard summary=dashboard.budget />
         <GoalsPreview />

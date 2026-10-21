@@ -28,7 +28,7 @@ pub fn Notice(
         ),
         NoticeKind::Warning => (
             IconName::Alert,
-            "border-amber-400/30 bg-amber-400/10 text-amber-200",
+            "border-amber-400/30 bg-warn/10 text-amber-200",
         ),
     };
     let key = StoredValue::new(dismiss_key);

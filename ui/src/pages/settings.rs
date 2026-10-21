@@ -241,7 +241,7 @@ fn PricingSection(has_key: bool, on_saved: Callback<()>) -> impl IntoView {
                                 </span>
                             }.into_any(),
                             KeyStatus::Failed(_) => view! {
-                                <span class="flex items-center gap-1 rounded-full bg-amber-400/15 px-2.5 py-0.5 text-xs text-amber-300">
+                                <span class="flex items-center gap-1 rounded-full bg-warn/14 px-2.5 py-0.5 text-xs text-warn">
                                     <Icon name=IconName::Alert class="size-3.5" />"Clé non vérifiée"
                                 </span>
                             }.into_any(),

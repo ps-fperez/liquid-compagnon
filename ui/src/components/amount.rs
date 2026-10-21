@@ -15,6 +15,9 @@ pub fn Amount(
     #[prop(optional)] colored: bool,
     #[prop(optional, into)] class: String,
     #[prop(optional)] animate: bool,
+    /// Euros entiers, pour les grands chiffres (patrimoine, reste à dépenser, bilan).
+    #[prop(optional)]
+    whole: bool,
 ) -> impl IntoView {
     let privacy = use_privacy();
     let color = match (
@@ -33,10 +36,11 @@ pub fn Amount(
     };
     let text = move || {
         let value = shown.get();
-        if signed {
-            format::amount_signed(value)
-        } else {
-            format::amount(value)
+        match (signed, whole) {
+            (true, true) => format::amount_whole_signed(value),
+            (true, false) => format::amount_signed(value),
+            (false, true) => format::amount_whole(value),
+            (false, false) => format::amount(value),
         }
     };
     view! {

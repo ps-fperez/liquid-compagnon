@@ -28,10 +28,6 @@ pub fn SavingsDetails(
     view! {
         <Card class="flex flex-col gap-3">
             <div class="flex items-center justify-between">
-                <span class="text-sm text-muted">"Solde actuel"</span>
-                <Amount value=balance class="text-lg font-semibold" />
-            </div>
-            <div class="flex items-center justify-between">
                 <span class="text-sm text-muted">"Dernier solde saisi"</span>
                 <span class="flex flex-col items-end">
                     <Amount value=reference_balance />

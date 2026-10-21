@@ -12,9 +12,9 @@ use leptos::prelude::*;
 use crate::api;
 use crate::components::Busy;
 use crate::components::amount_hint;
-use crate::components::style::{BTN_DANGER, BTN_GHOST, BTN_PRIMARY, LABEL, SECTION_TITLE};
+use crate::components::style::{BTN_DANGER, BTN_GHOST, BTN_PRIMARY, INPUT, LABEL, SECTION_TITLE};
 use crate::components::toast;
-use crate::components::{Amount, BottomSheet, Card, EmptyState, Field, cascade};
+use crate::components::{Amount, BottomSheet, Card, EmptyState, Field, Segmented, cascade};
 use crate::format;
 use crate::icons::{Icon, IconName};
 use crate::util::{Loaded, load, run_action, today, undo};
@@ -205,7 +205,18 @@ fn TransferForm(
         None => (Frequency::Monthly, None, String::new(), None),
     };
     let frequency = RwSignal::new(frequency);
-    let date = RwSignal::new(first.unwrap_or_else(today).to_string());
+    let first_date = first.unwrap_or_else(today);
+    let date = RwSignal::new(first_date.to_string());
+    // Virement annuel : « Chaque année en <mois>, le <jour> » ; l'année de départ est la prochaine
+    // échéance (ou celle du virement modifié).
+    let year_month = RwSignal::new(first_date.month());
+    let year_day = RwSignal::new(first_date.day().to_string());
+    let original_from_year = match existing.as_ref().map(|t| &t.schedule) {
+        Some(ScheduleDto::Yearly { from_year, .. }) => Some(*from_year),
+        _ => None,
+    };
+    // Côté dont on choisit le compte : d'abord celui qui manque.
+    let picking = RwSignal::new(None::<Side>);
     let until = RwSignal::new(until);
     let error = RwSignal::new(None::<String>);
     let busy = RwSignal::new(false);
@@ -277,6 +288,23 @@ fn TransferForm(
         } else {
             None
         };
+        if frequency.get_untracked() == Frequency::Yearly {
+            let Ok(day @ 1..=31) = year_day.get_untracked().trim().parse::<u8>() else {
+                return error.set(Some("Jour du virement : entre 1 et 31".into()));
+            };
+            let month = year_month.get_untracked();
+            let now = today();
+            let year = original_from_year.unwrap_or(
+                if (month, u32::from(day)) >= (now.month(), now.day()) {
+                    now.year()
+                } else {
+                    now.year() + 1
+                },
+            );
+            if let Some(first) = clamped(year, month, day) {
+                date.set(first.to_string());
+            }
+        }
         let schedule = match build_schedule(
             frequency.get_untracked(),
             &date.get_untracked(),
@@ -330,11 +358,65 @@ fn TransferForm(
         );
     };
 
+    // Ouvre le choix du premier côté manquant une fois les comptes chargés.
+    Effect::new(move |_| {
+        if accounts.with(|a| a.is_some()) && picking.get_untracked().is_none() {
+            if source.get_untracked().is_none() {
+                picking.set(Some(Side::From));
+            } else if target.get_untracked().is_none() {
+                picking.set(Some(Side::To));
+            }
+        }
+    });
+    let chosen = Callback::new(move |side: Side| {
+        picking.set(match side {
+            Side::From if target.get_untracked().is_none() => Some(Side::To),
+            _ => None,
+        });
+    });
+    let name_of = move |endpoint: Option<EndpointDto>| -> Option<String> {
+        match endpoint? {
+            EndpointDto::Account(id) => {
+                tracked.with(|list| list.iter().find(|a| a.id == id).map(|a| a.name.clone()))
+            }
+            EndpointDto::External(id) => {
+                external_list.with(|list| list.iter().find(|e| e.id == id).map(|e| e.name.clone()))
+            }
+        }
+    };
+    let to_employee_savings = move || matches!(target.get(), Some(EndpointDto::Account(id)) if tracked.with(|list| list.iter().any(|a| a.id == id && matches!(a.details, AccountDetailsDto::EmployeeSavings { .. }))));
+    let bonus = move || match (sent_amount(), received_amount()) {
+        (Some(out), Some(arrived)) if different.get() && arrived > out => Some(arrived - out),
+        _ => None,
+    };
+
     view! {
         <div class="flex flex-col gap-4">
-            <EndpointChoice label="De" selected=source other=target accounts=tracked externals=external_list on_external_created=reload_externals />
-            <EndpointChoice label="Vers" selected=target other=source accounts=tracked externals=external_list on_external_created=reload_externals />
-            <Field label="Montant envoyé" value=sent input_mode="decimal" suffix="€" hint=Signal::derive(move || Some(amount_hint(&sent.get()))) />
+            <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                <RouteCard side=Side::From endpoint=source picking=picking accounts=tracked externals=external_list />
+                <span class="text-lg text-primary-soft" aria-hidden="true">"→"</span>
+                <RouteCard side=Side::To endpoint=target picking=picking accounts=tracked externals=external_list />
+            </div>
+            {move || picking.get().map(|side| {
+                let (selected, other, label) = match side {
+                    Side::From => (source, target, "Choisir le compte de départ"),
+                    Side::To => (target, source, "Choisir le compte d'arrivée"),
+                };
+                view! {
+                    <div class="animate-fade-in rounded-xl border border-line p-3">
+                        <EndpointChoice label=label selected=selected other=other accounts=tracked externals=external_list on_external_created=reload_externals on_chosen=Callback::new(move |_| chosen.run(side)) />
+                    </div>
+                }
+            })}
+
+            {move || {
+                let label = if different.get() {
+                    name_of(source.get()).map_or_else(|| "Montant versé".to_string(), |n| format!("Versé depuis {n}"))
+                } else {
+                    "Montant".to_string()
+                };
+                view! { <Field label=label value=sent input_mode="decimal" suffix="€" large=true hint=Signal::derive(move || Some(amount_hint(&sent.get()))) /> }
+            }}
             <label class="flex min-h-11 items-center justify-between gap-3">
                 <span class="flex flex-col">
                     <span class="text-sm">"Montant reçu différent"</span>
@@ -348,26 +430,18 @@ fn TransferForm(
                 />
             </label>
             <Show when=move || different.get()>
-                <div class="animate-fade-in">
-                    <Field label="Montant reçu" value=received input_mode="decimal" suffix="€" hint=received_hint />
+                <div class="flex animate-fade-in flex-col gap-2">
+                    {move || {
+                        let label = name_of(target.get()).map_or_else(|| "Montant crédité".to_string(), |n| format!("Crédité sur {n}"));
+                        view! { <Field label=label value=received input_mode="decimal" suffix="€" large=true hint=received_hint /> }
+                    }}
+                    {move || to_employee_savings().then(|| view! {
+                        <p class="text-xs text-muted">"Votre versement plus l'abondement après prélèvements sociaux, tel qu'affiché par votre gestionnaire d'épargne salariale."</p>
+                    })}
                 </div>
             </Show>
 
-            <div class="flex flex-col gap-1.5">
-                <span class=LABEL>"Fréquence"</span>
-                <div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Fréquence">
-                    {Frequency::ALL.into_iter().map(|f| view! {
-                        <button
-                            role="radio"
-                            aria-checked=move || (frequency.get() == f).to_string()
-                            class=move || chip_class(frequency.get() == f)
-                            on:click=move |_| frequency.set(f)
-                        >
-                            {f.label()}
-                        </button>
-                    }).collect_view()}
-                </div>
-            </div>
+            <Segmented label="Fréquence" options=Frequency::ALL.into_iter().map(|f| (f, f.label())).collect() selected=frequency />
             {move || match frequency.get() {
                 Frequency::Once => view! { <Field label="Date" value=date input_type="date" /> }.into_any(),
                 Frequency::Monthly => view! {
@@ -377,12 +451,45 @@ fn TransferForm(
                     </div>
                 }.into_any(),
                 Frequency::Yearly => view! {
-                    <div class="grid grid-cols-2 gap-2">
-                        <Field label="Premier virement" value=date input_type="date" />
-                        <Field label="Jusqu'en (facultatif)" value=until input_mode="numeric" placeholder="2035" />
+                    <div class="grid grid-cols-[1fr_5rem] gap-2">
+                        <label class="flex flex-col gap-1.5">
+                            <span class=LABEL>"Chaque année en"</span>
+                            <select
+                                class=INPUT
+                                on:change=move |event| {
+                                    if let Ok(month) = event_target_value(&event).parse() {
+                                        year_month.set(month);
+                                    }
+                                }
+                            >
+                                {MONTHS.iter().enumerate().map(|(index, name)| {
+                                    let month = index as u32 + 1;
+                                    view! { <option value=month.to_string() selected=move || year_month.get() == month>{capitalize(name)}</option> }
+                                }).collect_view()}
+                            </select>
+                        </label>
+                        <Field label="Le" value=year_day input_mode="numeric" />
                     </div>
+                    <Field label="Jusqu'en (facultatif)" value=until input_mode="numeric" placeholder="2035" />
                 }.into_any(),
             }}
+            {move || bonus().map(|bonus| {
+                let when = match frequency.get() {
+                    Frequency::Yearly => format!("chaque {}", MONTHS[year_month.get() as usize - 1]),
+                    Frequency::Monthly => "chaque mois".to_string(),
+                    Frequency::Once => "une fois".to_string(),
+                };
+                let account = name_of(target.get()).unwrap_or_default();
+                view! {
+                    <div class="flex animate-fade-in flex-col gap-1 rounded-xl bg-surface-raised p-3">
+                        <span class="flex items-center justify-between text-sm">
+                            <span class="font-medium">"Abondement net"</span>
+                            <Amount value=bonus signed=true class="font-semibold text-gain" />
+                        </span>
+                        <span class="text-xs text-muted">{format!("Repris {when} dans la projection de {account}.")}</span>
+                    </div>
+                }
+            })}
             <Field label="Libellé (facultatif)" value=label placeholder="Épargne du mois" />
 
             {move || preview(&tracked.get(), source.get(), target.get(), sent_amount(), received_amount(), frequency.get())}
@@ -394,6 +501,78 @@ fn TransferForm(
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Side {
+    From,
+    To,
+}
+
+fn capitalize(word: &str) -> String {
+    let mut chars = word.chars();
+    chars
+        .next()
+        .map(|first| first.to_uppercase().collect::<String>() + chars.as_str())
+        .unwrap_or_default()
+}
+
+/// Carte « De » ou « Vers » (maquette v0.3) : compte choisi et son solde, ou « hors patrimoine » ;
+/// la toucher ouvre le choix du compte.
+#[component]
+fn RouteCard(
+    side: Side,
+    endpoint: RwSignal<Option<EndpointDto>>,
+    picking: RwSignal<Option<Side>>,
+    accounts: Signal<Vec<AccountDto>>,
+    externals: Signal<Vec<ExternalAccountDto>>,
+) -> impl IntoView {
+    let label = match side {
+        Side::From => "De",
+        Side::To => "Vers",
+    };
+    let active = move || picking.get() == Some(side);
+    let content = move || match endpoint.get() {
+        Some(EndpointDto::Account(id)) => accounts.with(|list| {
+            list.iter().find(|a| a.id == id).map(|a| {
+                let color = format!("background-color: {}", a.color);
+                (
+                    a.name.clone(),
+                    Some(color),
+                    format::amount_whole(movable_balance(a)),
+                    false,
+                )
+            })
+        }),
+        Some(EndpointDto::External(id)) => externals.with(|list| {
+            list.iter()
+                .find(|e| e.id == id)
+                .map(|e| (e.name.clone(), None, "hors patrimoine".to_string(), true))
+        }),
+        None => None,
+    };
+    view! {
+        <button
+            class=move || format!(
+                "flex min-h-16 min-w-0 flex-col gap-0.5 rounded-xl border bg-surface-raised px-3 py-2 text-left text-xs transition {} {}",
+                if active() { "border-primary shadow-glow-focus" } else { "border-line" },
+                if content().is_some_and(|c| c.3) { "border-dashed" } else { "" },
+            )
+            aria-label=format!("{label} : choisir le compte")
+            on:click=move |_| picking.set(Some(side))
+        >
+            <span class="text-muted">{label}</span>
+            {move || match content() {
+                Some((name, color, detail, _)) => view! {
+                    <span class="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-ink">
+                        {color.map(|style| view! { <span class="size-2 shrink-0 rounded-full" style=style></span> })}
+                        <span class="truncate">{name}</span>
+                    </span>
+                    <span class="truncate text-muted">{detail}</span>
+                }.into_any(),
+                None => view! { <span class="text-sm text-primary-soft">"Choisir"</span> }.into_any(),
+            }}
+        </button>
+    }
+}
 fn build_schedule(
     frequency: Frequency,
     date: &str,
@@ -489,12 +668,12 @@ fn preview(
         Frequency::Yearly => "Aperçu du premier virement, puis chaque année",
     };
     Some(view! {
-        <Card class="flex animate-fade-in flex-col gap-2">
+        <div class="flex animate-fade-in flex-col gap-2 rounded-xl bg-surface-raised px-3 py-2.5">
             <span class="text-xs text-muted">{rhythm}</span>
             {source.as_ref().map(|account| row(account, -sent))}
             {target.as_ref().map(|account| row(account, received))}
             {ceiling}
-        </Card>
+        </div>
     })
 }
 
@@ -508,6 +687,9 @@ fn EndpointChoice(
     accounts: Signal<Vec<AccountDto>>,
     externals: Signal<Vec<ExternalAccountDto>>,
     on_external_created: Callback<()>,
+    /// Appelé après le choix d'un compte (la carte de choix se referme).
+    #[prop(optional)]
+    on_chosen: Option<Callback<()>>,
 ) -> impl IntoView {
     let adding = RwSignal::new(false);
     let name = RwSignal::new(String::new());
@@ -526,6 +708,9 @@ fn EndpointChoice(
             other.set(None);
         }
         selected.set(Some(endpoint));
+        if let Some(chosen) = on_chosen {
+            chosen.run(());
+        }
     };
     let create = move |_| {
         let input = NameInput {
@@ -585,15 +770,33 @@ fn EndpointChoice(
     }
 }
 
-fn movement_look(kind: MovementKindDto) -> (IconName, &'static str, &'static str) {
+/// Icône, teinte de la pastille et libellés d'un mouvement (maquette v0.3 : une icône par nature).
+fn movement_look(kind: MovementKindDto) -> (IconName, &'static str, &'static str, &'static str) {
     match kind {
-        MovementKindDto::Expense => (IconName::Receipt, "text-primary-soft", "Dépense"),
-        MovementKindDto::Income => (IconName::Coins, "text-gain", "Revenu ponctuel"),
-        MovementKindDto::Charge => (IconName::Calendar, "text-muted", "Charge fixe"),
-        MovementKindDto::TransferIn => (IconName::ArrowIn, "text-gain", "Virement reçu"),
-        MovementKindDto::TransferOut => {
-            (IconName::ArrowOut, "text-secondary-light", "Virement émis")
-        }
+        MovementKindDto::Expense => (
+            IconName::Receipt,
+            "bg-loss/12 text-loss",
+            "Dépense",
+            "dépense",
+        ),
+        MovementKindDto::Income => (
+            IconName::Coins,
+            "bg-gain/15 text-gain",
+            "Revenu ponctuel",
+            "revenu",
+        ),
+        MovementKindDto::Charge => (
+            IconName::Refresh,
+            "bg-primary/15 text-primary-soft",
+            "Charge fixe",
+            "charge fixe",
+        ),
+        MovementKindDto::TransferIn | MovementKindDto::TransferOut => (
+            IconName::Transfer,
+            "bg-secondary-light/15 text-secondary-light",
+            "Virement",
+            "virement",
+        ),
     }
 }
 
@@ -601,37 +804,49 @@ fn movement_look(kind: MovementKindDto) -> (IconName, &'static str, &'static str
 #[component]
 pub fn MovementFeed(
     movements: Vec<MovementDto>,
+    /// Date du dernier solde saisi, pour le titre « Depuis le 1er oct. ».
+    #[prop(default = None)]
+    since: Option<NaiveDate>,
     #[prop(into)] empty_body: String,
     #[prop(into)] empty_action: String,
     on_empty_action: Callback<()>,
 ) -> impl IntoView {
+    let title = since.map_or_else(
+        || "Depuis le dernier solde saisi".to_string(),
+        |date| format!("Depuis le {}", format::day_month(date)),
+    );
     view! {
         <section class="flex flex-col gap-2">
-            <h2 class=SECTION_TITLE>"Depuis le dernier solde saisi"</h2>
+            <h2 class=SECTION_TITLE>{title}</h2>
             {if movements.is_empty() {
                 view! {
                     <EmptyState title="Aucun mouvement depuis" body=empty_body action=empty_action on_action=on_empty_action />
                 }.into_any()
             } else {
                 view! {
-                    <Card class="flex flex-col p-2">
+                    <Card class="flex flex-col divide-y divide-line px-3 py-1">
                         {movements.into_iter().enumerate().map(|(index, movement)| {
-                            let (icon, tone, fallback) = movement_look(movement.kind);
-                            let direction = match movement.kind {
-                                MovementKindDto::TransferIn => "de ",
-                                _ => "vers ",
+                            let (icon, tone, fallback, kind) = movement_look(movement.kind);
+                            let title = movement.label.clone().unwrap_or_else(|| match (movement.kind, movement.counterpart.as_deref()) {
+                                (MovementKindDto::TransferIn, Some(name)) => format!("Depuis {name}"),
+                                (MovementKindDto::TransferOut, Some(name)) => format!("Vers {name}"),
+                                _ => fallback.to_string(),
+                            });
+                            let detail = match (movement.kind, movement.label.is_some(), movement.counterpart.as_deref()) {
+                                (MovementKindDto::TransferIn, true, Some(name)) => format!(" · de {name}"),
+                                (MovementKindDto::TransferOut, true, Some(name)) => format!(" · vers {name}"),
+                                _ => format!(" · {kind}"),
                             };
-                            let counterpart = movement.counterpart.map(|name| format!(" · {direction}{name}"));
                             view! {
-                                <div class="flex min-h-14 animate-rise items-center gap-3 px-2" style=cascade(index)>
-                                    <span class=format!("flex size-9 shrink-0 items-center justify-center rounded-full bg-surface-raised {tone}")>
-                                        <Icon name=icon class="size-5" />
+                                <div class="flex min-h-13 animate-rise items-center gap-2.5 py-2" style=cascade(index)>
+                                    <span class=format!("flex size-8 shrink-0 items-center justify-center rounded-[10px] {tone}")>
+                                        <Icon name=icon class="size-4" />
                                     </span>
                                     <span class="flex min-w-0 flex-1 flex-col">
-                                        <span class="truncate text-sm">{movement.label.unwrap_or_else(|| fallback.to_string())}</span>
-                                        <span class="truncate text-xs text-muted">{format::date(movement.date)} {counterpart}</span>
+                                        <span class="truncate text-sm">{title}</span>
+                                        <span class="truncate text-[11px] text-muted">{format::day_month(movement.date)} {detail}</span>
                                     </span>
-                                    <Amount value=movement.amount signed=true colored=true />
+                                    <Amount value=movement.amount signed=true class=if movement.amount.is_sign_positive() && !movement.amount.is_zero() { "text-sm text-gain" } else { "text-sm" } />
                                 </div>
                             }
                         }).collect_view()}
@@ -641,7 +856,6 @@ pub fn MovementFeed(
         </section>
     }
 }
-
 /// Virements à venir d'un compte (récurrents ou ponctuels datés après aujourd'hui), modifiables,
 /// et bouton « Nouveau virement » pré-rempli avec ce compte.
 #[component]

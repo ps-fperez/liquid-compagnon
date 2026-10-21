@@ -19,6 +19,7 @@
   --color-muted: #a7a3c2;
   --color-gain: #34d399;
   --color-loss: #f87171;
+  --color-warn: #fbbf24;
 
   /* Glow : réservé aux éléments clés (carte patrimoine, bouton +, onglet actif, courbe neutre,
      champ actif, flash de cours). */
@@ -192,6 +193,13 @@
     background-color: var(--color-bg);
     -webkit-tap-highlight-color: transparent;
     -webkit-text-size-adjust: 100%;
+  }
+
+  /* Aucun débordement horizontal : sous Android, un contenu plus large que l'écran (glissement
+     d'une transition, rangée défilante en pleine largeur) recadre la vue et fait sauter la barre. */
+  html,
+  body {
+    overflow-x: clip;
   }
 
   body {

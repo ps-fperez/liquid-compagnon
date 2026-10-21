@@ -1,11 +1,11 @@
 use lc_shared_dto::{
-    AccountDetailsDto, AccountDto, AccountTypeDto, ErrorDto, IdInput, MovementDto,
+    AccountDetailsDto, AccountDto, AccountTypeDto, ErrorDto, IdInput, MovementDto, NaiveDate,
 };
 use leptos::prelude::*;
 use leptos_router::components::A;
 use leptos_router::hooks::use_params_map;
 
-use super::checking::CheckingDetails;
+use super::checking::{CheckingDetails, checking_gauge};
 use super::pei::PeiDetails;
 use super::savings::SavingsDetails;
 use super::securities::SecuritiesDetails;
@@ -13,7 +13,7 @@ use super::settings::{AccountSettingsSheet, ArchiveControl};
 use super::transfers::{MovementFeed, ScheduledTransfers};
 use crate::api;
 use crate::components::style::BTN_SECONDARY;
-use crate::components::{Amount, ErrorBanner, ProvenanceBadge, Skeleton};
+use crate::components::{Amount, ErrorBanner, Gauge, HeroCard, ProvenanceBadge, Skeleton};
 use crate::icons::{Icon, IconName};
 use crate::util::load;
 
@@ -49,10 +49,11 @@ fn AccountView(account: AccountDto, on_saved: Callback<()>) -> impl IntoView {
     let settings_open = RwSignal::new(false);
     let new_transfer = RwSignal::new(false);
     let open_transfer = Callback::new(move |_: ()| new_transfer.set(true));
-    let transfer_feed = move |movements: Vec<MovementDto>| {
+    let transfer_feed = move |movements: Vec<MovementDto>, since: Option<NaiveDate>| {
         view! {
             <MovementFeed
                 movements=movements
+                since=since
                 empty_body="Les virements reçus ou émis depuis le dernier solde saisi apparaîtront ici et feront évoluer le solde."
                 empty_action="Nouveau virement"
                 on_empty_action=open_transfer
@@ -82,7 +83,7 @@ fn AccountView(account: AccountDto, on_saved: Callback<()>) -> impl IntoView {
                 />
             }
             .into_any(),
-            Some(transfer_feed(movements).into_any()),
+            Some(transfer_feed(movements, Some(balance_updated_on)).into_any()),
         ),
         AccountDetailsDto::Securities {
             cash,
@@ -99,7 +100,7 @@ fn AccountView(account: AccountDto, on_saved: Callback<()>) -> impl IntoView {
                 />
             }
             .into_any(),
-            (!movements.is_empty()).then(|| transfer_feed(movements).into_any()),
+            (!movements.is_empty()).then(|| transfer_feed(movements, None).into_any()),
         ),
         AccountDetailsDto::Checking {
             balance,
@@ -129,20 +130,49 @@ fn AccountView(account: AccountDto, on_saved: Callback<()>) -> impl IntoView {
         ),
     };
 
-    view! {
-        <header class="flex flex-col gap-1 px-1">
-            <span class="flex items-center gap-2 text-sm text-muted">
-                <span class="size-2.5 rounded-full" style=format!("background-color: {}", account.color)></span>
-                {account.account_type.label()}
-                {account.archived.then(|| view! { <span class="rounded-full bg-surface-raised px-2 py-0.5 text-xs">"clôturé"</span> })}
+    let hero_extra = match &account.details {
+        AccountDetailsDto::Checking {
+            reference_balance,
+            reference_on,
+            movements,
+            balance,
+        } => Some(checking_gauge(*balance, *reference_balance, *reference_on, movements).into_any()),
+        AccountDetailsDto::Savings {
+            balance,
+            deposit_ceiling: Some(ceiling),
+            ..
+        } if ceiling.is_sign_positive() && !ceiling.is_zero() => Some(view! {
+            <Gauge percent=crate::util::to_percent(*balance / *ceiling) />
+            <span class="text-[11px] text-muted">
+                <Amount value=*balance whole=true /> " sur un plafond de " <Amount value=*ceiling whole=true />
             </span>
-            <h1 class="text-2xl font-medium">{account.name.clone()}</h1>
-            <span class="flex flex-wrap items-center gap-2">
-                <Amount value=account.value class="text-3xl font-semibold tracking-tight" />
-                <ProvenanceBadge provenance=account.provenance />
-            </span>
-        </header>
+        }.into_any()),
+        _ => None,
+    };
+    let negative = account.value.is_sign_negative() && !account.value.is_zero();
+    // « Fortuneo · compte courant » ; le type seul s'il sert déjà de nom.
+    let type_label = account.account_type.label();
+    let hero_title = if account.name.eq_ignore_ascii_case(type_label) {
+        account.name.clone()
+    } else {
+        format!("{} · {}", account.name, type_label.to_lowercase())
+    };
+    let dot = format!("background-color: {}", account.color);
+    let (value, provenance, archived) = (account.value, account.provenance, account.archived);
 
+    view! {
+        <HeroCard class="gap-2">
+            <span class="flex items-center gap-2 text-sm text-muted">
+                <span class="size-2.5 rounded-full" style=dot></span>
+                <span class="truncate">{hero_title}</span>
+                {archived.then(|| view! { <span class="rounded-full bg-surface-raised px-2 py-0.5 text-xs">"clôturé"</span> })}
+            </span>
+            <span class="flex flex-wrap items-center gap-2">
+                <Amount value=value animate=true class=format!("text-[32px] leading-tight font-bold tracking-tight {}", if negative { "text-loss" } else { "" }) />
+                <ProvenanceBadge provenance=provenance />
+            </span>
+            {hero_extra}
+        </HeroCard>
         {details}
         {feed}
         <ScheduledTransfers

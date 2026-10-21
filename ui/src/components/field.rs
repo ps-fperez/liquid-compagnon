@@ -28,8 +28,16 @@ pub fn Field(
     /// Texte d'aide sous le champ (exemple, montant reconnu…).
     #[prop(optional, into)]
     hint: MaybeProp<String>,
+    /// Grand champ de montant (saisie principale d'une feuille).
+    #[prop(optional)]
+    large: bool,
 ) -> impl IntoView {
-    let padding = if suffix.is_some() { "pr-10" } else { "" };
+    let padding = match (suffix.is_some(), large) {
+        (true, true) => "pr-12 min-h-14 text-[28px] font-bold",
+        (true, false) => "pr-10",
+        (false, true) => "min-h-14 text-[28px] font-bold",
+        (false, false) => "",
+    };
     let input_ref = NodeRef::<Input>::new();
     sync_input(input_ref, value);
     let update = move |current: String| {

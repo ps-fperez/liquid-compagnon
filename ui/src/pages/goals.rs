@@ -11,9 +11,9 @@ use leptos_router::components::A;
 use crate::api;
 use crate::components::Busy;
 use crate::components::amount_hint;
-use crate::components::style::{BTN_DANGER, BTN_GHOST, BTN_PRIMARY, LABEL, SECTION_TITLE};
+use crate::components::style::{BTN_DANGER, BTN_GHOST, BTN_PRIMARY, KICKER, LABEL, SECTION_TITLE};
 use crate::components::toast;
-use crate::components::{Amount, BottomSheet, Card, EmptyState, Field, cascade};
+use crate::components::{Amount, BottomSheet, Card, EmptyState, Field, HeroCard, cascade};
 use crate::format;
 use crate::util::{Loaded, current_month, load, load_then, run_action};
 
@@ -21,7 +21,7 @@ fn status_look(status: GoalStatusDto) -> Option<(&'static str, &'static str)> {
     match status {
         GoalStatusDto::Reached => Some(("Atteint", "bg-gain/15 text-gain")),
         GoalStatusDto::OnTrack => Some(("Dans les temps", "bg-gain/15 text-gain")),
-        GoalStatusDto::Late => Some(("En retard", "bg-amber-400/15 text-amber-300")),
+        GoalStatusDto::Late => Some(("En retard", "bg-warn/14 text-warn")),
         GoalStatusDto::Open => None,
     }
 }
@@ -40,7 +40,7 @@ pub fn GoalRing(
     #[prop(default = 64)] size: u32,
     #[prop(optional)] reached: bool,
 ) -> impl IntoView {
-    let stroke = 6.0;
+    let stroke = if size >= 100 { 9.0 } else { 6.0 };
     let radius = f64::from(size) / 2.0 - stroke;
     let circumference = 2.0 * std::f64::consts::PI * radius;
     let fraction = (crate::charts::to_f64(percent) / 100.0).clamp(0.0, 1.0);
@@ -62,12 +62,13 @@ pub fn GoalRing(
                     cx=center cy=center r=radius fill="none" stroke=color stroke-width=stroke stroke-linecap="round"
                     stroke-dasharray=circumference
                     style=move || format!(
-                        "stroke-dashoffset: {:.2}; transition: stroke-dashoffset 900ms cubic-bezier(0.33, 1, 0.68, 1)",
+                        "stroke-dashoffset: {:.2}; transition: stroke-dashoffset 1200ms cubic-bezier(0.2, 0.8, 0.2, 1){}",
                         circumference * (1.0 - if filled.get() { fraction } else { 0.0 }),
+                        if size >= 100 && !reached { "; filter: drop-shadow(0 0 6px rgb(168 85 247 / 0.6))" } else { "" },
                     )
                 />
             </svg>
-            <span class="absolute text-xs font-semibold tabular-nums">{format::percent(percent.round(), 0)}</span>
+            <span class=format!("absolute font-bold tabular-nums {}", if size >= 100 { "text-2xl" } else { "text-xs" })>{format::percent(percent.round(), 0)}</span>
         </span>
     }
 }
@@ -138,47 +139,54 @@ fn GoalCard(goal: GoalDto) -> impl IntoView {
         .zip(goal.arrivals.clone())
         .collect::<Vec<_>>();
     view! {
-        <Card class="flex flex-col gap-3">
-            <div class="flex items-center gap-3">
-                <GoalRing percent=goal.percent size=64 reached=reached />
-                <span class="flex min-w-0 flex-1 flex-col gap-1">
-                    <span class="flex items-center justify-between gap-2">
-                        <span class="truncate font-medium">{goal.name.clone()}</span>
-                        {status.map(|(label, tone)| view! {
-                            <span class=format!("shrink-0 rounded-full px-2 py-0.5 text-xs {tone}")>{label}</span>
-                        })}
-                    </span>
-                    <span class="text-xs text-muted">
-                        <Amount value=goal.current /> " sur " <Amount value=goal.target /> {deadline}
-                    </span>
+        <div class="flex flex-col gap-2.5">
+            <HeroCard class="items-center gap-2 text-center">
+                <GoalRing percent=goal.percent size=112 reached=reached />
+                <span class="text-lg font-bold">{goal.name.clone()}</span>
+                <span class="text-xs text-muted">
+                    <Amount value=goal.current whole=true class="font-semibold text-ink" /> " sur " <Amount value=goal.target whole=true /> {deadline}
                 </span>
-            </div>
+                {status.map(|(label, tone)| view! {
+                    <span class=format!("rounded-full px-2.5 py-0.5 text-[11px] {tone}")>{label}</span>
+                })}
+            </HeroCard>
             {(!reached).then(|| view! {
-                <div class="flex flex-col gap-1.5 text-sm">
+                <Card class="flex flex-col gap-2 text-sm">
                     {goal.required_monthly.map(|required| view! {
-                        <span class="flex justify-between"><span class="text-muted">"Effort nécessaire"</span><span><Amount value=required /> "/mois"</span></span>
+                        <span class="flex justify-between"><span>"Effort nécessaire"</span><span class="font-bold"><Amount value=required whole=true /> "/mois"</span></span>
                     })}
-                    <span class="flex justify-between"><span class="text-muted">"Versé aujourd'hui"</span><span><Amount value=goal.contributed_monthly /> "/mois"</span></span>
+                    <span class="flex justify-between"><span>"Versé aujourd'hui"</span><span><Amount value=goal.contributed_monthly whole=true /> "/mois"</span></span>
                     {returns_help.then(|| view! {
                         <span class="text-xs text-muted">"Les rendements comblent l'écart dans le scénario neutre."</span>
                     })}
-                </div>
-                <div class="grid grid-cols-3 gap-2 border-t border-line pt-3 text-center">
-                    {arrivals.into_iter().map(|(label, arrival)| view! {
-                        <span class="flex flex-col gap-0.5">
-                            <span class="text-[11px] text-muted">{label}</span>
-                            <span class="text-xs font-medium">{arrival.as_deref().map_or_else(|| "plus de 10 ans".to_string(), format::month_short)}</span>
-                        </span>
+                </Card>
+                <span class=KICKER>"Objectif atteint en"</span>
+                <div class="grid grid-cols-3 gap-1.5">
+                    {arrivals.into_iter().map(|(label, arrival)| {
+                        let neutral = label == "Neutre";
+                        view! {
+                            <span class=format!(
+                                "flex flex-col gap-0.5 rounded-xl bg-surface-raised p-2 text-left {}",
+                                if neutral { "outline outline-1 outline-primary shadow-[0_0_14px_-6px_var(--color-primary)]" } else { "" },
+                            )>
+                                <span class="text-[11px] text-muted">{label}</span>
+                                <span class="text-sm font-bold">{arrival.as_deref().map_or_else(|| "plus de 10 ans".to_string(), format::month_short)}</span>
+                            </span>
+                        }
                     }).collect_view()}
                 </div>
             })}
             {(!goal.account_names.is_empty()).then(|| view! {
-                <span class="text-xs text-muted">{format!("Comptes suivis : {}", goal.account_names.join(", "))}</span>
+                <span class=KICKER>"Comptes suivis"</span>
+                <div class="flex flex-wrap gap-1.5">
+                    {goal.account_names.iter().map(|name| view! {
+                        <span class="rounded-full border border-line px-2.5 py-0.5 text-[11px]">{name.clone()}</span>
+                    }).collect_view()}
+                </div>
             })}
-        </Card>
+        </div>
     }
 }
-
 /// Aperçu de l'accueil : anneaux défilant horizontalement et accès « Tout voir ».
 #[component]
 pub fn GoalsPreview() -> impl IntoView {

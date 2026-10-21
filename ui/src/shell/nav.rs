@@ -59,12 +59,12 @@ pub fn BottomNav() -> impl IntoView {
             <A
                 href=tab.href
                 attr:class=move || {
-                    let color = if active() { "text-primary" } else { "text-muted" };
+                    let color = if active() { "text-primary-soft" } else { "text-muted" };
                     format!("flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-[11px] {color}")
                 }
             >
                 <span class=move || {
-                    if active() { "rounded-xl px-3 py-1 bg-primary/15 shadow-glow-primary" } else { "px-3 py-1" }
+                    if active() { "px-3 py-1 drop-shadow-[0_0_8px_rgb(168_85_247/0.7)]" } else { "px-3 py-1" }
                 }>
                     <Icon name=tab.icon class="size-6" />
                 </span>
@@ -75,14 +75,14 @@ pub fn BottomNav() -> impl IntoView {
 
     view! {
         <nav
-            class="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur"
+            class="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-bg/92 pb-[env(safe-area-inset-bottom)] backdrop-blur"
             aria-label="Navigation principale"
         >
             <div class="mx-auto flex max-w-md items-end px-2">
                 {LEFT.iter().map(tab).collect_view()}
                 <div class="flex flex-1 justify-center">
                     <button
-                        class="relative -mt-6 flex size-16 items-center justify-center rounded-full bg-secondary text-ink animate-glow-pulse transition active:scale-95"
+                        class="relative -mt-6 flex size-16 items-center justify-center rounded-full bg-secondary text-white shadow-[0_0_20px_rgb(59_130_246/0.6)] animate-glow-pulse transition active:scale-95"
                         aria-label="Saisie rapide"
                         on:pointerdown=move |_| halo.update(|n| *n += 1)
                         on:click=move |_| quick_add.set(true)

@@ -10,7 +10,7 @@ use leptos::task::spawn_local;
 use crate::api;
 use crate::components::Busy;
 use crate::components::amount_hint;
-use crate::components::style::{BTN_ICON, BTN_PRIMARY};
+use crate::components::style::BTN_PRIMARY;
 use crate::components::toast;
 use crate::components::{Amount, Field};
 use crate::format;
@@ -156,19 +156,19 @@ fn ReviewStory(review: ReviewDto, on_close: Callback<()>) -> impl IntoView {
             .unwrap_or(400.0);
         step(f64::from(event.client_x()) > width / 3.0);
     };
-    let month_label = review.with_value(|r| format::month_label(&r.report.month));
+    let of_month = review.with_value(|r| format::of_month(&r.report.month));
 
     view! {
         <div
-            class="fixed inset-0 z-50 flex flex-col bg-bg bg-[radial-gradient(120%_80%_at_50%_0%,rgb(124_58_237/0.35),var(--color-bg)_70%)] px-5 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))] animate-fade-in"
+            class="fixed inset-0 z-50 flex flex-col bg-bg bg-[radial-gradient(120%_70%_at_50%_0%,#2a1250_0%,var(--color-bg)_60%)] px-5 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))] animate-fade-in"
             role="dialog"
             aria-modal="true"
-            aria-label=format!("Bilan de {month_label}")
+            aria-label=format!("Bilan {of_month}")
             on:click=on_tap
         >
             <div class="mx-auto flex w-full max-w-md gap-1.5" aria-hidden="true">
                 {(0..count).map(|i| view! {
-                    <span class="h-1 flex-1 overflow-hidden rounded-full bg-ink/20">
+                    <span class="h-[3px] flex-1 overflow-hidden rounded-full bg-ink/20">
                         {move || {
                             let current = index.get();
                             if i < current {
@@ -185,16 +185,17 @@ fn ReviewStory(review: ReviewDto, on_close: Callback<()>) -> impl IntoView {
                 }).collect_view()}
             </div>
             <div class="mx-auto mt-3 flex w-full max-w-md items-center justify-between">
-                <span class="text-sm font-medium">{format!("Bilan de {month_label}")}</span>
-                <button class=BTN_ICON aria-label="Fermer le bilan" on:click=move |_| on_close.run(())>
-                    <Icon name=IconName::Close />
+                <span class="text-xs text-muted">{format!("Bilan {of_month}")}</span>
+                <button class="-mr-2 flex min-h-11 items-center gap-1 px-2 text-xs text-muted" aria-label="Fermer le bilan" on:click=move |_| on_close.run(())>
+                    "Fermer"
+                    <Icon name=IconName::Close class="size-4" />
                 </button>
             </div>
             <div class="mx-auto flex w-full max-w-md flex-1 flex-col justify-center">
                 {move || {
                     let kind = cards.with_value(|c| c[index.get()]);
                     review.with_value(|r| view! {
-                        <div class="flex animate-rise flex-col gap-4">
+                        <div class="flex animate-page-forward flex-col gap-3.5">
                             {card(kind, r, on_close)}
                         </div>
                     })
@@ -204,33 +205,39 @@ fn ReviewStory(review: ReviewDto, on_close: Callback<()>) -> impl IntoView {
     }
 }
 
-fn comparison(current: Decimal, previous: Option<Decimal>, previous_month: &str) -> Option<String> {
-    let previous = previous?;
-    let delta = current - previous;
+fn comparison(
+    current: Decimal,
+    previous: Option<Decimal>,
+    previous_month: &str,
+) -> Option<AnyView> {
+    let delta = current - previous?;
+    let previous_month = previous_month.to_string();
     Some(if delta.is_zero() {
-        format!("Autant qu'en {previous_month}.")
+        view! { <p class="text-sm text-muted">{format!("Autant qu'en {previous_month}.")}</p> }
+            .into_any()
     } else {
-        format!(
-            "{} par rapport à {previous_month}.",
-            format::amount_signed(delta)
-        )
+        view! {
+            <p class="text-sm text-muted">
+                <Amount value=delta signed=true colored=true whole=true /> {format!(" par rapport à {previous_month}.")}
+            </p>
+        }
+        .into_any()
     })
 }
-
 fn card(kind: CardKind, review: &ReviewDto, on_close: Callback<()>) -> AnyView {
     let report = &review.report;
     let previous_month = format::shift_month(&report.month, -1)
         .map(|m| format::month_name(&m))
         .unwrap_or_default();
-    let kicker = |text: &'static str| view! { <p class="text-sm font-medium uppercase tracking-wider text-primary-soft">{text}</p> };
+    let kicker = |text: &'static str| view! { <p class="text-[11px] uppercase tracking-[0.1em] text-muted">{text}</p> };
     match kind {
         CardKind::Saved => {
             let negative = report.saved.is_sign_negative() && !report.saved.is_zero();
             view! {
                 {kicker("Votre mois en un chiffre")}
-                <p class="text-xl">{if negative { "Vous avez puisé dans votre épargne" } else { "Vous avez mis de côté" }}</p>
-                <Amount value=report.saved.abs() animate=true class=format!("text-5xl font-semibold tracking-tight {}", if negative { "text-loss" } else { "text-gain" }) />
-                {comparison(report.saved, report.previous_saved, &previous_month).map(|text| view! { <p class="text-muted">{text}</p> })}
+                <h3 class="text-[22px] font-semibold leading-tight text-balance">{if negative { "Vous avez puisé dans votre épargne" } else { "Vous avez mis de côté" }}</h3>
+                <Amount value=report.saved.abs() animate=true whole=true class=format!("text-[44px] leading-none font-extrabold tracking-tight {}", if negative { "text-loss" } else { "text-gain" }) />
+                {comparison(report.saved, report.previous_saved, &previous_month)}
             }
             .into_any()
         }
@@ -238,9 +245,9 @@ fn card(kind: CardKind, review: &ReviewDto, on_close: Callback<()>) -> AnyView {
             let spent = report.fixed_charges + report.expenses + report.external_out;
             view! {
                 {kicker("Entrées et sorties")}
-                <p class="text-2xl font-medium leading-snug">
-                    <Amount value=report.received /> " reçus, " <Amount value=spent /> " dépensés"
-                </p>
+                <h3 class="text-[22px] font-semibold leading-tight">
+                    <Amount value=report.received whole=true /> " reçus, " <Amount value=spent whole=true /> " dépensés"
+                </h3>
                 {(!report.one_off_incomes.is_zero()).then(|| view! {
                     <p class="text-muted">"Dont " <Amount value=report.one_off_incomes /> " de revenus ponctuels en plus du salaire."</p>
                 })}
@@ -276,7 +283,7 @@ fn card(kind: CardKind, review: &ReviewDto, on_close: Callback<()>) -> AnyView {
         }
         CardKind::Wealth => view! {
             {kicker("Patrimoine")}
-            <Amount value=report.wealth_end.unwrap_or_default() animate=true class="text-5xl font-semibold tracking-tight" />
+            <Amount value=report.wealth_end.unwrap_or_default() animate=true whole=true class="text-[44px] leading-none font-extrabold tracking-tight" />
             {report.wealth_change.map(|change| view! {
                 <p class="flex flex-wrap items-center gap-2 text-lg">
                     {report.wealth_change_percent.map(|p| view! {

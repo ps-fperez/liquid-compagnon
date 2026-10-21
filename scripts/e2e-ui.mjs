@@ -85,20 +85,11 @@ async function click(label) {
   await sleep(200);
 }
 
-/** Clique, dans le groupe intitulé `group` (« De », « Vers »…), le bouton libellé `label`. */
-async function clickIn(group, label) {
-  const ok = await evaluate(`(() => {
-    const scope = document.querySelector('[role="dialog"]') ?? document;
-    const title = [...scope.querySelectorAll("span")].find(s => s.textContent.trim() === ${JSON.stringify(group)});
-    const el = title && [...title.parentElement.querySelectorAll("button")].find(b => b.textContent.trim() === ${JSON.stringify(label)});
-    if (!el) return false;
-    el.click();
-    return true;
-  })()`);
-  if (!ok) await fail(`« ${label} » introuvable dans « ${group} »`);
-  await sleep(200);
+/** Feuille de virement : touche la carte « De » ou « Vers », puis le compte `label` proposé. */
+async function clickIn(side, label) {
+  await click(`${side} : choisir le compte`);
+  await click(label);
 }
-
 /** Coche la case de la feuille ouverte dont le libellé contient `text`. */
 async function check(text) {
   const ok = await evaluate(`(() => {
@@ -119,6 +110,23 @@ async function tapRight() {
     await send("Input.dispatchMouseEvent", { type, x: 340, y: 420, button: "left", clickCount: 1 });
   }
   await sleep(300);
+}
+
+/** Échantillonne la largeur du document pendant une transition d'écran : rien ne doit déborder
+ *  (un débordement fait sauter la barre de navigation sous Android). */
+async function overflowDuring(action) {
+  await evaluate(`(() => {
+    window.__overflow = 0;
+    const until = performance.now() + 600;
+    const sample = () => {
+      window.__overflow = Math.max(window.__overflow, document.documentElement.scrollWidth - window.innerWidth);
+      if (performance.now() < until) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  })()`);
+  await action();
+  await sleep(700);
+  return evaluate("window.__overflow");
 }
 
 /** Remplit le champ dont le libellé vaut `label` (déclenche l'événement input). */
@@ -225,7 +233,8 @@ await click("Déverrouiller");
 await waitForText("Patrimoine total");
 
 console.log("7. Budget : salaire, dépense en saisie rapide, charge fixe");
-await click("Budget");
+const overflow = await overflowDuring(() => click("Budget"));
+if (overflow > 0) await fail(`la page déborde de ${overflow} px pendant la transition vers Budget`);
 await waitForText("Renseignez votre salaire net");
 await click("Ajouter mon salaire"); // ajout directement depuis la carte vide
 await fill("Salaire net mensuel (net à payer)", "3200");
@@ -304,7 +313,7 @@ if (checked !== "Twelve Data") await fail(`source sélectionnée inattendue : ${
 await shot("pea-recherche");
 await click("Fermer");
 await click("Accueil");
-await waitForText("11 140,25 €");
+await waitForText("11 140 €"); // total en euros entiers
 
 console.log("10. Réglages et sauvegarde");
 await click("Réglages");
@@ -340,7 +349,7 @@ await invoke("upsert_position", {
 await click("Accueil");
 await waitForText("Clé Twelve Data absente ou invalide");
 await waitForText("prix de revient"); // valorisé sans cours ni appel réseau
-await waitForText("12 140,25 €"); // 10 640,25 + 500 + 2 × 500
+await waitForText("12 140 €"); // 10 640,25 + 500 + 2 × 500, en euros entiers
 await shot("cle-absente");
 // Avertissement refermable : il disparaît et reste fermé après un rechargement.
 await click("Fermer l'avertissement");
@@ -390,7 +399,7 @@ await click("Enregistrer");
 await waitForText("−85,40 €");
 await waitForText("Aucun mouvement depuis"); // la nouvelle référence inclut la dépense
 await click("Accueil");
-await waitForText("12 054,85 €"); // 12 140,25 − 85,40
+await waitForText("12 055 €"); // 12 140,25 − 85,40, en euros entiers
 await shot("compte-courant-decouvert");
 
 console.log("13. Mois type : autre livret, virements, compte hors patrimoine, abondement, prélèvement");
@@ -408,7 +417,7 @@ await click("Virement");
 await waitForText("Nouveau virement");
 await clickIn("Vers", "Livret A");
 await click("Ponctuel");
-await fill("Montant envoyé", "300");
+await fill("Montant", "300");
 await waitForText("10 940,25 €"); // aperçu : 10 640,25 + 300
 await shot("virement-apercu");
 await click("Enregistrer le virement");
@@ -421,7 +430,7 @@ await clickIn("Vers", "+ Hors patrimoine");
 await fill("Nom du compte hors patrimoine", "Compte joint");
 await click("Ajouter");
 await waitForText("Compte hors patrimoine ajouté");
-await fill("Montant envoyé", "1560");
+await fill("Montant", "1560");
 await click("Enregistrer le virement");
 await waitForText("Virement programmé");
 await waitForText("Compte joint"); // section « Hors patrimoine »
@@ -432,12 +441,12 @@ await click("Virement");
 await clickIn("De", "Livret A");
 await clickIn("Vers", "Compte courant");
 await click("Ponctuel");
-await fill("Montant envoyé", "100");
+await fill("Montant", "100");
 await click("Enregistrer le virement");
 await waitForText("Virement enregistré");
 await waitForText("10 840,25 €");
 if (!(await openChecking())) await fail("compte courant introuvable dans la liste");
-await waitForText("Virement reçu");
+await waitForText("Depuis Livret A"); // virement reçu
 await waitForText("−285,40 €"); // −85,40 − 300 + 100 (le mensuel du jour est inclus dans la référence)
 await waitForText("Chaque mois, le");
 await shot("compte-courant-virements");
@@ -450,9 +459,9 @@ await waitForText("Nouveau virement");
 await click("Nouveau virement");
 await clickIn("De", "Compte courant");
 await click("Annuel");
-await fill("Montant envoyé", "500");
+await fill("Montant", "500");
 await check("Montant reçu différent");
-await fill("Montant reçu", "1493,30");
+await fill("Crédité sur Épargne salariale", "1493,30");
 await waitForText("Abondement net : +993,30 €");
 await shot("virement-abondement");
 await click("Enregistrer le virement");
@@ -474,21 +483,20 @@ await waitForText("prélevée le 5");
 await shot("budget-virements");
 // Virements entre comptes suivis : le patrimoine total ne bouge pas.
 await click("Accueil");
-await waitForText("12 054,85 €");
+await waitForText("12 055 €");
 console.log("14. Reste à dépenser et annulation d'une saisie");
 // 3 200 + 100 rapatriés − 1 330 de charges − 800 d'épargne programmée (Livret A, épargne
 // salariale) − 1 560 vers le compte joint = −390 ; moins 72,50 de dépenses.
-await waitForText("Reste à dépenser ·");
+await waitForText("RESTE À DÉPENSER ·"); // intitulé en capitales
 await waitForText("Budget dépassé");
-await waitForText("−462,50\u00a0€");
+await waitForText("−463\u00a0€"); // −462,50 en euros entiers
 await shot("reste-a-depenser");
 await click("Détail du reste à dépenser");
-await waitForText("Enveloppe du mois");
-await waitForText("−390,00\u00a0€");
+await waitForText("Dépenses du mois");
 await waitForText("Rapatriements d'épargne");
 await waitForText("+100,00\u00a0€");
 await waitForText("−800,00\u00a0€");
-await waitForText("dépassent vos revenus du mois de 390,00\u00a0€");
+await waitForText("dépassent vos revenus du mois de 390\u00a0€");
 await waitForText("Alimentation"); // où part l'argent
 await shot("reste-a-depenser-detail");
 await click("Fermer");
@@ -503,7 +511,7 @@ await waitForText("Dépense annulée");
 await sleep(500);
 if ((await bodyText()).includes("18,40")) await fail("la dépense annulée est encore affichée");
 await click("Accueil");
-await waitForText("−462,50\u00a0€");
+await waitForText("−463\u00a0€"); // −462,50 en euros entiers
 console.log("15. Objectifs d'épargne");
 const now = new Date();
 const nextYear = now.getFullYear() + 1;
@@ -522,7 +530,7 @@ await click("Enregistrer l'objectif");
 await waitForText("Objectif créé");
 await waitForText("Voyage au Japon");
 await waitForText("Versé aujourd'hui");
-await waitForText("Comptes suivis : Livret A");
+await waitForText("COMPTES SUIVIS");
 await click("Nouvel objectif");
 await fill("Nom", "Matelas de sécurité");
 await fill("Montant visé", "5000");
@@ -555,7 +563,9 @@ await waitForText("Saisissez votre code PIN");
 await typePin("1234");
 await click("Déverrouiller");
 const monthName = previous.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
-await waitForText(`Bilan de ${monthName}`);
+const ofMonth = /^[aeiouéà]/.test(monthName) ? `d'${monthName}` : `de ${monthName}`;
+await waitForText(`Bilan ${ofMonth}`);
+await sleep(900); // fin du fondu et du défilement du montant
 await shot("bilan-premiere-carte");
 let guard = 0;
 while (!(await bodyText()).includes("repart à combien") && guard++ < 6) await tapRight();
@@ -574,10 +584,10 @@ await typePin("1234");
 await click("Déverrouiller");
 await waitForText("Patrimoine total");
 await sleep(800);
-if ((await bodyText()).includes("Bilan de ")) await fail("le bilan s'est rouvert");
+if ((await bodyText()).includes(`Bilan ${ofMonth}`)) await fail("le bilan s'est rouvert");
 await waitForText("Bilans du mois");
 await click(monthName);
-await waitForText(`Bilan de ${monthName}`);
+await waitForText(`Bilan ${ofMonth}`);
 await waitForText("dépensés", 12000); // les cartes défilent seules
 if ((await bodyText()).includes("repart à combien")) await fail("l'historique ne doit pas proposer le recalage");
 await click("Fermer le bilan");

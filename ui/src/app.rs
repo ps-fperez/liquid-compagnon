@@ -32,7 +32,7 @@ pub fn App() -> impl IntoView {
         <Router>
             <SessionGate>
                 <Header />
-                <main class="mx-auto max-w-md px-4 pt-2 pb-32">
+                <main class="mx-auto max-w-md overflow-x-clip px-4 pt-2 pb-32">
                     <PageTransition>
                     <Routes fallback=|| view! { <NotFound /> }>
                         <Route path=path!("/") view=DashboardPage />

@@ -105,6 +105,55 @@ pub fn amount_whole(value: Decimal) -> String {
     )
 }
 
+/// Euros entiers signés : « +190 € », « −106 € ».
+pub fn amount_whole_signed(value: Decimal) -> String {
+    let rounded = round(value, 0);
+    format!(
+        "{}{}{NBSP}€",
+        sign(rounded, true),
+        unsigned_fixed(rounded, 0)
+    )
+}
+
+/// Nombre de jours du mois de `value`.
+pub fn days_in_month(value: NaiveDate) -> u32 {
+    let (year, month) = if value.month() == 12 {
+        (value.year() + 1, 1)
+    } else {
+        (value.year(), value.month() + 1)
+    };
+    NaiveDate::from_ymd_opt(year, month, 1)
+        .and_then(|first| first.pred_opt())
+        .map_or(31, |last| last.day())
+}
+
+/// « 21 oct. », « 1er oct. ».
+pub fn day_month(value: NaiveDate) -> String {
+    let day = if value.day() == 1 {
+        "1er".to_string()
+    } else {
+        value.day().to_string()
+    };
+    format!("{day} {}", MONTHS_SHORT[value.month0() as usize])
+}
+
+/// « de septembre 2026 », « d'octobre 2026 » : élision devant une voyelle (avril, août, octobre).
+pub fn of_month(iso_month: &str) -> String {
+    elide(&month_label(iso_month))
+}
+
+/// « de septembre », « d'octobre ».
+pub fn of_month_name(iso_month: &str) -> String {
+    elide(&month_name(iso_month))
+}
+
+fn elide(word: &str) -> String {
+    match word.chars().next() {
+        Some('a' | 'e' | 'i' | 'o' | 'u' | 'é' | 'à') => format!("d'{word}"),
+        _ => format!("de {word}"),
+    }
+}
+
 /// Montant compact pour les axes de graphique : « 950 € », « 48 k€ », « 1,2 M€ ».
 pub fn amount_compact(value: Decimal) -> String {
     let magnitude = value.abs();
