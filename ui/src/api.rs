@@ -133,6 +133,11 @@ commands_without_input! {
     expense_suggestions -> Vec<LabelSuggestionDto>;
     // Virements
     list_external_accounts -> Vec<ExternalAccountDto>;
+    // Objectifs et bilan du mois
+    list_goals -> Vec<GoalDto>;
+    /// Bilan du mois précédent s'il n'a jamais été présenté (marqué comme vu).
+    pending_review -> Option<ReviewDto>;
+    review_months -> Vec<String>;
 }
 
 commands_with_input! {
@@ -176,6 +181,13 @@ commands_with_input! {
     create_external_account(NameInput) -> String;
     rename_external_account(RenameInput) -> ();
     delete_external_account(IdInput) -> ();
+    // Objectifs et bilan du mois
+    /// Renvoie l'identifiant de l'objectif.
+    save_goal(GoalInput) -> String;
+    delete_goal(IdInput) -> ();
+    get_review(MonthInput) -> ReviewDto;
+    /// Recale le premier compte courant au solde de départ du mois.
+    start_month(StartMonthInput) -> ();
     // Budget
     budget_summary(MonthInput) -> BudgetSummaryDto;
     list_categories(IncludeArchivedInput) -> Vec<CategoryDto>;

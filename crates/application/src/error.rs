@@ -39,7 +39,7 @@ pub enum AppError {
     #[error("Seul un compte courant actif peut être choisi pour ce mouvement")]
     InvalidAccountLink,
     #[error("Ce compte n'existe plus ou est clôturé : choisissez un autre compte")]
-    InvalidTransferEndpoint,
+    UnavailableAccount,
     #[error("Un compte hors patrimoine porte déjà ce nom")]
     DuplicateExternalAccount,
     #[error("Ce compte est utilisé par des virements")]

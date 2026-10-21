@@ -15,8 +15,8 @@ use lc_domain::account::AccountType;
 use lc_domain::{Money, Month};
 use lc_infrastructure::{
     Argon2PinHasher, Database, JsonBackupCodec, SqliteAccountRepository, SqliteBudgetRepository,
-    SqliteDatasetStore, SqlitePriceCache, SqliteSettingsStore, SqliteSnapshotRepository,
-    SqliteTransferRepository, SystemClock,
+    SqliteDatasetStore, SqlitePlanningRepository, SqlitePriceCache, SqliteSettingsStore,
+    SqliteSnapshotRepository, SqliteTransferRepository, SystemClock,
 };
 use rust_decimal_macros::dec;
 
@@ -26,6 +26,7 @@ struct App {
     accounts: Arc<SqliteAccountRepository>,
     budget: Arc<SqliteBudgetRepository>,
     transfers: Arc<SqliteTransferRepository>,
+    planning: Arc<SqlitePlanningRepository>,
     snapshots: Arc<SqliteSnapshotRepository>,
     settings: Arc<SqliteSettingsStore>,
     dataset: Arc<SqliteDatasetStore>,
@@ -43,6 +44,7 @@ impl App {
             accounts: Arc::new(SqliteAccountRepository::new(db.clone())),
             budget: Arc::new(SqliteBudgetRepository::new(db.clone())),
             transfers: Arc::new(SqliteTransferRepository::new(db.clone())),
+            planning: Arc::new(SqlitePlanningRepository::new(db.clone())),
             snapshots: Arc::new(SqliteSnapshotRepository::new(db.clone())),
             settings: Arc::new(SqliteSettingsStore::new(db.clone())),
             dataset: Arc::new(SqliteDatasetStore::new(db.clone())),
@@ -98,6 +100,7 @@ impl App {
             self.accounts.clone(),
             self.budget.clone(),
             self.transfers.clone(),
+            self.planning.clone(),
             self.snapshots.clone(),
             self.settings.clone(),
             self.dataset.clone(),

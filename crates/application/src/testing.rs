@@ -8,20 +8,24 @@ use async_trait::async_trait;
 use chrono::{DateTime, Duration, NaiveDate, Utc};
 use lc_domain::account::{Account, AssetRef, CurrencyCode, QuoteSource};
 use lc_domain::budget::{Category, Expense, OneOffIncome, RecurringCharge, SalaryEntry};
+use lc_domain::goal::SavingsGoal;
+use lc_domain::review::MonthlyReview;
 use lc_domain::transfer::{ExternalAccount, Transfer};
 use lc_domain::valuation::{Quote, QuoteFreshness};
 use lc_domain::{
-    AccountId, CategoryId, ChargeId, Decimal, ExpenseId, ExternalId, IncomeId, Money, SalaryId,
-    Snapshot, TransferId,
+    AccountId, CategoryId, ChargeId, Decimal, ExpenseId, ExternalId, GoalId, IncomeId, Money,
+    SalaryId, Snapshot, TransferId,
 };
 
 use crate::accounts::AccountUseCases;
 use crate::backup::{BackupUseCases, FullDataset, SCHEMA_VERSION};
 use crate::budget::BudgetUseCases;
 use crate::dashboard::DashboardUseCases;
+use crate::goals::GoalUseCases;
 use crate::ports::*;
 use crate::pricing::PricingService;
 use crate::projection::ProjectionUseCases;
+use crate::review::ReviewUseCases;
 use crate::security::SecurityUseCases;
 use crate::transfers::TransferUseCases;
 
@@ -415,11 +419,40 @@ impl TransferRepository for InMemoryTransfers {
     }
 }
 
+#[derive(Default)]
+pub struct InMemoryPlanning {
+    goals: Mutex<Vec<SavingsGoal>>,
+    reviews: Mutex<Vec<MonthlyReview>>,
+}
+
+impl PlanningRepository for InMemoryPlanning {
+    fn goals(&self) -> StorageResult<Vec<SavingsGoal>> {
+        Ok(lock(&self.goals).clone())
+    }
+    fn save_goal(&self, goal: &SavingsGoal) -> StorageResult<()> {
+        upsert(&self.goals, goal, |g: &SavingsGoal| g.id() == goal.id());
+        Ok(())
+    }
+    fn delete_goal(&self, id: GoalId) -> StorageResult<bool> {
+        Ok(remove(&self.goals, |g: &SavingsGoal| g.id() == id))
+    }
+    fn reviews(&self) -> StorageResult<Vec<MonthlyReview>> {
+        Ok(lock(&self.reviews).clone())
+    }
+    fn save_review(&self, review: &MonthlyReview) -> StorageResult<()> {
+        upsert(&self.reviews, review, |r: &MonthlyReview| {
+            r.month() == review.month()
+        });
+        Ok(())
+    }
+}
+
 pub struct InMemoryDatasetStore {
     accounts: Arc<InMemoryAccounts>,
     budget: Arc<InMemoryBudget>,
     snapshots: Arc<InMemorySnapshots>,
     transfers: Arc<InMemoryTransfers>,
+    planning: Arc<InMemoryPlanning>,
 }
 
 impl DatasetStore for InMemoryDatasetStore {
@@ -433,6 +466,8 @@ impl DatasetStore for InMemoryDatasetStore {
         *lock(&self.snapshots.0) = data.snapshots.clone();
         *lock(&self.transfers.transfers) = data.transfers.clone();
         *lock(&self.transfers.externals) = data.external_accounts.clone();
+        *lock(&self.planning.goals) = data.goals.clone();
+        *lock(&self.planning.reviews) = data.reviews.clone();
         Ok(())
     }
 }
@@ -445,6 +480,7 @@ pub struct TestEnv {
     pub budget_repo: Arc<InMemoryBudget>,
     pub snapshots: Arc<InMemorySnapshots>,
     pub transfers_repo: Arc<InMemoryTransfers>,
+    pub planning_repo: Arc<InMemoryPlanning>,
     pub cache: Arc<InMemoryPriceCache>,
     pub settings: Arc<InMemorySettings>,
     pub coingecko: Arc<FakeProvider>,
@@ -486,6 +522,7 @@ impl TestEnv {
             budget_repo: Arc::default(),
             snapshots: Arc::default(),
             transfers_repo: Arc::default(),
+            planning_repo: Arc::default(),
             cache: Arc::default(),
             settings: Arc::default(),
         }
@@ -555,11 +592,34 @@ impl TestEnv {
         )
     }
 
+    pub fn goals(&self) -> GoalUseCases {
+        GoalUseCases::new(
+            self.planning_repo.clone(),
+            self.accounts.clone(),
+            self.budget_repo.clone(),
+            self.transfers_repo.clone(),
+            self.pricing(),
+            self.clock.clone(),
+        )
+    }
+
+    pub fn reviews(&self) -> ReviewUseCases {
+        ReviewUseCases::new(
+            self.planning_repo.clone(),
+            self.accounts.clone(),
+            self.budget_repo.clone(),
+            self.transfers_repo.clone(),
+            self.snapshots.clone(),
+            self.clock.clone(),
+        )
+    }
+
     pub fn backup(&self) -> BackupUseCases {
         BackupUseCases::new(
             self.accounts.clone(),
             self.budget_repo.clone(),
             self.transfers_repo.clone(),
+            self.planning_repo.clone(),
             self.snapshots.clone(),
             self.settings.clone(),
             Arc::new(InMemoryDatasetStore {
@@ -567,6 +627,7 @@ impl TestEnv {
                 budget: self.budget_repo.clone(),
                 snapshots: self.snapshots.clone(),
                 transfers: self.transfers_repo.clone(),
+                planning: self.planning_repo.clone(),
             }),
             Arc::new(JsonCodec),
             self.clock.clone(),

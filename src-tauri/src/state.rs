@@ -7,17 +7,20 @@ use lc_application::accounts::AccountUseCases;
 use lc_application::backup::BackupUseCases;
 use lc_application::budget::BudgetUseCases;
 use lc_application::dashboard::DashboardUseCases;
+use lc_application::goals::GoalUseCases;
 use lc_application::ports::{Clock, PriceProvider};
 use lc_application::pricing::PricingService;
 use lc_application::projection::ProjectionUseCases;
+use lc_application::review::ReviewUseCases;
 use lc_application::security::SecurityUseCases;
 use lc_application::transfers::TransferUseCases;
 use lc_application::updates::UpdateService;
 use lc_infrastructure::{
     Argon2PinHasher, CoinGeckoProvider, Database, GithubReleaseFeed, HttpPackageDownloader,
     JsonBackupCodec, SqliteAccountRepository, SqliteBudgetRepository, SqliteDatasetStore,
-    SqlitePriceCache, SqliteSettingsStore, SqliteSnapshotRepository, SqliteTransferRepository,
-    SystemClock, TwelveDataProvider, YahooFinanceProvider, download_client, http_client,
+    SqlitePlanningRepository, SqlitePriceCache, SqliteSettingsStore, SqliteSnapshotRepository,
+    SqliteTransferRepository, SystemClock, TwelveDataProvider, YahooFinanceProvider,
+    download_client, http_client,
 };
 
 use crate::session::Session;
@@ -34,6 +37,8 @@ pub struct Services {
     pub accounts: AccountUseCases,
     pub dashboard: DashboardUseCases,
     pub projection: ProjectionUseCases,
+    pub goals: GoalUseCases,
+    pub reviews: ReviewUseCases,
     pub backup: BackupUseCases,
     pub updates: Updates,
 }
@@ -49,6 +54,7 @@ impl Services {
         let accounts = Arc::new(SqliteAccountRepository::new(db.clone()));
         let budget = Arc::new(SqliteBudgetRepository::new(db.clone()));
         let transfers = Arc::new(SqliteTransferRepository::new(db.clone()));
+        let planning = Arc::new(SqlitePlanningRepository::new(db.clone()));
         let snapshots = Arc::new(SqliteSnapshotRepository::new(db.clone()));
         let settings = Arc::new(SqliteSettingsStore::new(db.clone()));
         let http = http_client()?;
@@ -111,13 +117,30 @@ impl Services {
                 accounts.clone(),
                 budget.clone(),
                 transfers.clone(),
+                pricing.clone(),
+                clock.clone(),
+            ),
+            goals: GoalUseCases::new(
+                planning.clone(),
+                accounts.clone(),
+                budget.clone(),
+                transfers.clone(),
                 pricing,
+                clock.clone(),
+            ),
+            reviews: ReviewUseCases::new(
+                planning.clone(),
+                accounts.clone(),
+                budget.clone(),
+                transfers.clone(),
+                snapshots.clone(),
                 clock.clone(),
             ),
             backup: BackupUseCases::new(
                 accounts,
                 budget,
                 transfers,
+                planning,
                 snapshots,
                 settings,
                 Arc::new(SqliteDatasetStore::new(db)),

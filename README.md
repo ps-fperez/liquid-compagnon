@@ -68,9 +68,16 @@ Bouton « + » › **Virement**, ou « Nouveau virement » sur la fiche d'un com
 L'accueil affiche, sous le patrimoine, ce qu'il reste à dépenser dans le mois : revenus du mois et rapatriements d'épargne vers un compte courant, moins les charges fixes, l'épargne programmée (virements d'un compte courant vers un livret, un PEA, une épargne salariale…) et les virements d'un compte courant vers un compte hors patrimoine, moins les dépenses saisies. Toutes les échéances du mois comptent, même à venir. La carte indique le montant par jour restant, la jauge compare les dépenses au jour du mois, et l'état passe de « Dans le rythme » à « Rythme élevé » ou « Budget dépassé ». La toucher ouvre le détail du calcul, la fin de mois projetée au rythme actuel et les trois catégories les plus dépensées.
 
 Après l'ajout d'une dépense, d'un revenu ponctuel ou d'un virement, la notification (en bas de l'écran) propose « Annuler » pendant 5 secondes. Les animations sont désactivées si Android demande de les réduire (Accessibilité › Supprimer les animations).
+### Objectifs d'épargne (à partir de la v0.3)
+
+Projection › **Nouvel objectif** : un nom, un montant, une échéance facultative et les comptes qui y contribuent. La progression est la valeur de ces comptes (rien à saisir en double). Chaque objectif affiche l'effort mensuel nécessaire pour tenir l'échéance (sans rendement), ce qui est déjà versé chaque mois par virements récurrents, et la date d'arrivée dans les trois scénarios de projection (sur 10 ans). L'accueil montre les objectifs en anneaux ; un objectif atteint s'illumine et est fêté une fois.
+
+### Bilan du mois (à partir de la v0.3)
+
+Au premier déverrouillage d'un mois, le bilan du mois écoulé s'ouvre en cartes qui défilent seules (toucher à droite ou à gauche pour avancer ou revenir) : montant mis de côté comparé au mois précédent, entrées et sorties, catégories, patrimoine, objectifs. La dernière carte demande le solde de départ du compte courant après les virements de début de mois (pré-rempli avec celui du mois précédent) et recale le compte. Les bilans passés restent consultables depuis l'accueil (section Évolution).
 ### Sauvegarde des données
 
-Réglages › **Exporter mes données** écrit un fichier JSON (sélecteur de fichiers Android). Il contient toutes les données en clair (format v3 depuis la v0.3 ; les exports v1 et v2 restent importables), sans le code PIN ni la clé Twelve Data : le conserver dans un endroit sûr. Réglages › **Importer une sauvegarde** le restaure (fichier entièrement vérifié avant tout remplacement). Un rappel s'affiche si aucun export n'a eu lieu depuis 30 jours.
+Réglages › **Exporter mes données** écrit un fichier JSON (sélecteur de fichiers Android). Il contient toutes les données en clair (format v4 depuis la v0.3 ; les exports v1 à v3 restent importables), sans le code PIN ni la clé Twelve Data : le conserver dans un endroit sûr. Réglages › **Importer une sauvegarde** le restaure (fichier entièrement vérifié avant tout remplacement). Un rappel s'affiche si aucun export n'a eu lieu depuis 30 jours.
 
 ### Cours des ETF
 

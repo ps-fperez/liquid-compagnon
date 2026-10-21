@@ -1,4 +1,5 @@
-//! Format d'échange de la sauvegarde (version 3 : virements, comptes hors patrimoine,
+//! Format d'échange de la sauvegarde (version 4 : objectifs d'épargne et bilans du mois ;
+//! version 3 : virements, comptes hors patrimoine,
 //! prélèvements des charges, livrets génériques ; version 2 : compte courant) et conversion depuis/vers le domaine.
 //!
 //! Les montants et taux sont sérialisés en chaînes décimales exactes, les dates en ISO 8601.
@@ -16,11 +17,13 @@ use lc_domain::account::{
 use lc_domain::budget::{
     Category, Debit, Expense, OneOffIncome, Periodicity, RecurringCharge, SalaryEntry,
 };
+use lc_domain::goal::SavingsGoal;
 use lc_domain::ledger::BalanceReference;
+use lc_domain::review::MonthlyReview;
 use lc_domain::transfer::{Endpoint, ExternalAccount, Schedule, Transfer};
 use lc_domain::{
     AccountId, CategoryId, ChargeId, Color, Decimal, DomainError, ExpenseId, ExternalId, FundId,
-    IncomeId, Label, Money, Month, Rate, SalaryId, Snapshot, SnapshotId, SnapshotKind,
+    GoalId, IncomeId, Label, Money, Month, Rate, SalaryId, Snapshot, SnapshotId, SnapshotKind,
     SnapshotLine, TransferId,
 };
 use serde::{Deserialize, Serialize};
@@ -46,6 +49,30 @@ pub struct FullDataset {
     pub transfers: Vec<TransferRecord>,
     #[serde(default)]
     pub external_accounts: Vec<ExternalAccountRecord>,
+    /// Absents avant la version 4.
+    #[serde(default)]
+    pub goals: Vec<GoalRecord>,
+    #[serde(default)]
+    pub reviews: Vec<ReviewRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GoalRecord {
+    pub id: Uuid,
+    pub name: String,
+    pub target: Decimal,
+    /// `AAAA-MM`
+    pub deadline: Option<String>,
+    pub accounts: Vec<Uuid>,
+    pub reached_on: Option<NaiveDate>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReviewRecord {
+    /// `AAAA-MM`
+    pub month: String,
+    pub seen_at: DateTime<Utc>,
+    pub next_start_balance: Option<Decimal>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -389,6 +416,27 @@ impl FullDataset {
                     name: a.name().to_string(),
                 })
                 .collect(),
+            goals: data
+                .goals
+                .iter()
+                .map(|g| GoalRecord {
+                    id: *g.id().as_uuid(),
+                    name: g.name().to_string(),
+                    target: g.target().amount(),
+                    deadline: g.deadline().map(|m| m.to_string()),
+                    accounts: g.accounts().iter().map(|a| *a.as_uuid()).collect(),
+                    reached_on: g.reached_on(),
+                })
+                .collect(),
+            reviews: data
+                .reviews
+                .iter()
+                .map(|r| ReviewRecord {
+                    month: r.month().to_string(),
+                    seen_at: r.seen_at(),
+                    next_start_balance: r.next_start_balance().map(|m| m.amount()),
+                })
+                .collect(),
         }
     }
 }
@@ -688,6 +736,40 @@ impl FullDataset {
             ));
         }
 
+        let mut goals = Vec::with_capacity(self.goals.len());
+        for r in self.goals {
+            let mut linked = Vec::with_capacity(r.accounts.len());
+            for id in r.accounts {
+                let id = AccountId::from_uuid(id);
+                if !account_ids.contains(&id) {
+                    return Err(invalid("objectif : référence de compte inconnue"));
+                }
+                linked.push(id);
+            }
+            let goal = (|| {
+                Ok::<_, DomainError>(
+                    SavingsGoal::new(
+                        GoalId::from_uuid(r.id),
+                        Label::new(&r.name)?,
+                        Money::new(r.target),
+                        r.deadline.as_deref().map(str::parse::<Month>).transpose()?,
+                        linked,
+                    )?
+                    .with_reached_on(r.reached_on),
+                )
+            })()
+            .map_err(context("objectif"))?;
+            goals.push(goal);
+        }
+        let mut reviews = Vec::with_capacity(self.reviews.len());
+        for r in self.reviews {
+            let month: Month = r.month.parse().map_err(context("bilan"))?;
+            reviews.push(
+                MonthlyReview::new(month, r.seen_at)
+                    .with_next_start_balance(r.next_start_balance.map(Money::new)),
+            );
+        }
+
         Ok(Dataset {
             categories,
             salaries,
@@ -698,6 +780,8 @@ impl FullDataset {
             snapshots,
             transfers,
             external_accounts,
+            goals,
+            reviews,
         })
     }
 }

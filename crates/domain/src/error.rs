@@ -37,6 +37,8 @@ pub enum DomainError {
     TransferWithoutTrackedAccount,
     #[error("Jour du mois invalide (1 à 31)")]
     InvalidDayOfMonth,
+    #[error("Choisissez au moins un compte")]
+    GoalWithoutAccount,
     #[error("Cette valeur de part est plus ancienne que la dernière saisie")]
     OutdatedNav,
 }

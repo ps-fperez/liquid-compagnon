@@ -113,6 +113,14 @@ async function check(text) {
   await sleep(200);
 }
 
+/** Touche l'écran à droite (clientX élevé) : avance d'une carte dans le bilan. */
+async function tapRight() {
+  for (const type of ["mousePressed", "mouseReleased"]) {
+    await send("Input.dispatchMouseEvent", { type, x: 340, y: 420, button: "left", clickCount: 1 });
+  }
+  await sleep(300);
+}
+
 /** Remplit le champ dont le libellé vaut `label` (déclenche l'événement input). */
 async function fill(label, value) {
   const ok = await evaluate(`(() => {
@@ -496,6 +504,83 @@ await sleep(500);
 if ((await bodyText()).includes("18,40")) await fail("la dépense annulée est encore affichée");
 await click("Accueil");
 await waitForText("−462,50\u00a0€");
+console.log("15. Objectifs d'épargne");
+const now = new Date();
+const nextYear = now.getFullYear() + 1;
+const months = 12 * (nextYear - now.getFullYear()) + (12 - (now.getMonth() + 1));
+const effort = (4000 / months).toFixed(2).replace(".", ",");
+await click("Projection");
+await click("Créer un objectif");
+await waitForText("Nouvel objectif");
+await fill("Nom", "Voyage au Japon");
+await fill("Montant visé", "14840,25"); // 4 000 € de plus que le Livret A
+await fill("Échéance (facultatif)", `${nextYear}-12`);
+await click("Livret A");
+await waitForText(`Effort nécessaire : ${effort}\u00a0€/mois pendant ${months} mois`);
+await shot("objectif-creation");
+await click("Enregistrer l'objectif");
+await waitForText("Objectif créé");
+await waitForText("Voyage au Japon");
+await waitForText("Versé aujourd'hui");
+await waitForText("Comptes suivis : Livret A");
+await click("Nouvel objectif");
+await fill("Nom", "Matelas de sécurité");
+await fill("Montant visé", "5000");
+await click("Livret A");
+await click("Enregistrer l'objectif");
+await waitForText("Objectif atteint : Matelas de sécurité");
+await waitForText("Atteint");
+await shot("objectifs");
+await click("Accueil");
+await waitForText("Tout voir");
+await waitForText("Voyage au Japon");
+
+console.log("16. Bilan du mois : ouverture au déverrouillage, cartes, recalage, historique");
+// Une dépense du mois précédent : l'application « a servi » avant ce mois-ci.
+const previous = new Date(now.getFullYear(), now.getMonth() - 1, 15);
+const previousIso = `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, "0")}`;
+const categories = await invoke("list_categories", { include_archived: false });
+await invoke("save_expense", {
+  id: null,
+  amount: "35",
+  category_id: categories[0].id,
+  date: `${previousIso}-15`,
+  label: "Restaurant",
+  account_id: null,
+});
+await evaluate("window.__TAURI__.core.invoke('lock')");
+await evaluate("location.reload()");
+await sleep(1500);
+await waitForText("Saisissez votre code PIN");
+await typePin("1234");
+await click("Déverrouiller");
+const monthName = previous.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+await waitForText(`Bilan de ${monthName}`);
+await shot("bilan-premiere-carte");
+let guard = 0;
+while (!(await bodyText()).includes("repart à combien") && guard++ < 6) await tapRight();
+await waitForText("repart à combien ?");
+await waitForText("Déjà pris en compte");
+await shot("bilan-recalage");
+await fill("Solde de départ", "250");
+await click("C'est parti");
+await waitForText("C'est parti pour ce mois-ci");
+await waitForText("250,00\u00a0€");
+// Le bilan ne s'ouvre qu'une fois ; il reste consultable depuis l'accueil.
+await evaluate("window.__TAURI__.core.invoke('lock')");
+await evaluate("location.reload()");
+await sleep(1500);
+await typePin("1234");
+await click("Déverrouiller");
+await waitForText("Patrimoine total");
+await sleep(800);
+if ((await bodyText()).includes("Bilan de ")) await fail("le bilan s'est rouvert");
+await waitForText("Bilans du mois");
+await click(monthName);
+await waitForText(`Bilan de ${monthName}`);
+await waitForText("dépensés", 12000); // les cartes défilent seules
+if ((await bodyText()).includes("repart à combien")) await fail("l'historique ne doit pas proposer le recalage");
+await click("Fermer le bilan");
 ws.close();
 if (errors.length > 0) {
   console.error(`ÉCHEC : ${errors.length} erreur(s) dans la WebView`);

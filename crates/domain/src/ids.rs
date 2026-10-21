@@ -52,6 +52,8 @@ define_id!(
     TransferId,
     /// Identifiant d'un compte hors patrimoine (compte joint, banque d'un crédit…).
     ExternalId,
+    /// Identifiant d'un objectif d'épargne.
+    GoalId,
 );
 
 #[cfg(test)]

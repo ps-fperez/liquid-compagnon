@@ -7,6 +7,7 @@ pub mod account;
 pub mod budget;
 pub mod defaults;
 mod error;
+pub mod goal;
 mod ids;
 pub mod ledger;
 mod math;
@@ -14,6 +15,7 @@ mod money;
 mod month;
 pub mod projection;
 mod rate;
+pub mod review;
 pub mod snapshot;
 mod text;
 pub mod transfer;
@@ -21,8 +23,8 @@ pub mod valuation;
 
 pub use error::DomainError;
 pub use ids::{
-    AccountId, CategoryId, ChargeId, ExpenseId, ExternalId, FundId, IncomeId, SalaryId, SnapshotId,
-    TransferId,
+    AccountId, CategoryId, ChargeId, ExpenseId, ExternalId, FundId, GoalId, IncomeId, SalaryId,
+    SnapshotId, TransferId,
 };
 pub use money::Money;
 pub use month::Month;

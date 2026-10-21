@@ -210,6 +210,24 @@ Légende de couverture :
 | Annuler une dépense | e2e 14 | [ ] « Annuler » à portée du pouce |
 | Une seule notification | — | [ ] Deux saisies de suite : une seule notification |
 | Animations réduites | CSS `prefers-reduced-motion` · `count_up` | [ ] Supprimer les animations : montants affichés directement |
+## Objectifs et bilan du mois (savings-goals, monthly-review, v0.3)
+
+| Scénario | Couverture automatique | Téléphone |
+|---|---|---|
+| Apport immobilier | dom : `progress_is_the_value_of_linked_accounts` · app : `report_shows_progress_effort_and_contributions` | [ ] Objectif sur LDDS et PEA |
+| Sans compte | dom : `progress_is_the_value_of_linked_accounts` · app : `report_shows_progress_effort_and_contributions` | — |
+| Effort mensuel | dom : `required_monthly_counts_months_until_the_deadline` · e2e 15 (effort en direct) | — |
+| Dans les temps grâce aux rendements | dom : `arrival_and_status_follow_the_projection` | [ ] Dates d'arrivée plausibles |
+| Hors d'atteinte | dom : `arrival_and_status_follow_the_projection` · e2e 15 | — |
+| Première atteinte | dom : `reaching_the_target_is_recorded_once` · app : `reaching_a_goal_is_reported_once` · e2e 15 | [ ] Anneau illuminé, une seule notification |
+| Création en une feuille | e2e 15 | — |
+| Début de mois | app : `review_is_pending_once_after_a_month_of_use` · e2e 16 | [ ] Bilan d'octobre le 1er novembre |
+| Première utilisation | app : `review_is_pending_once_after_a_month_of_use` | — |
+| Mis de côté / Hausse d'une catégorie | app : `month_report_compares_with_the_previous_month` | [ ] Chiffres cohérents avec le mois réel |
+| Patrimoine et objectifs du mois | app : `wealth_and_goals_come_from_snapshots` | — |
+| Compte perso à 250 € / Mois suivant | dom : `previous_start_balance_is_suggested` · app : `start_of_month_resets_the_checking_account` · e2e 16 | [ ] Recalage à 250 € après les virements du 1er |
+| Revoir un mois | e2e 16 | [ ] Bilans passés depuis Évolution |
+| Sauvegarde v4 | app : `export_then_import_restores_identical_data` · infra : `goals_and_reviews_roundtrip` | — |
 ## Anomalies
 | # | Écran | Description | Statut |
 |---|---|---|---|

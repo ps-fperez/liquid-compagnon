@@ -5,10 +5,12 @@ use async_trait::async_trait;
 use chrono::{DateTime, NaiveDate, Utc};
 use lc_domain::account::{Account, AssetRef, QuoteSource};
 use lc_domain::budget::{Category, Expense, OneOffIncome, RecurringCharge, SalaryEntry};
+use lc_domain::goal::SavingsGoal;
+use lc_domain::review::MonthlyReview;
 use lc_domain::transfer::{ExternalAccount, Transfer};
 use lc_domain::valuation::Quote;
 use lc_domain::{
-    AccountId, CategoryId, ChargeId, ExpenseId, ExternalId, IncomeId, SalaryId, Snapshot,
+    AccountId, CategoryId, ChargeId, ExpenseId, ExternalId, GoalId, IncomeId, SalaryId, Snapshot,
     TransferId,
 };
 
@@ -70,6 +72,16 @@ pub trait TransferRepository: Send + Sync {
     fn external_accounts(&self) -> StorageResult<Vec<ExternalAccount>>;
     fn save_external_account(&self, account: &ExternalAccount) -> StorageResult<()>;
     fn delete_external_account(&self, id: ExternalId) -> StorageResult<bool>;
+}
+
+/// Objectifs d'épargne et bilans du mois déjà présentés.
+pub trait PlanningRepository: Send + Sync {
+    fn goals(&self) -> StorageResult<Vec<SavingsGoal>>;
+    fn save_goal(&self, goal: &SavingsGoal) -> StorageResult<()>;
+    fn delete_goal(&self, id: GoalId) -> StorageResult<bool>;
+
+    fn reviews(&self) -> StorageResult<Vec<MonthlyReview>>;
+    fn save_review(&self, review: &MonthlyReview) -> StorageResult<()>;
 }
 
 pub trait SnapshotRepository: Send + Sync {
@@ -174,6 +186,8 @@ pub struct Dataset {
     pub snapshots: Vec<Snapshot>,
     pub transfers: Vec<Transfer>,
     pub external_accounts: Vec<ExternalAccount>,
+    pub goals: Vec<SavingsGoal>,
+    pub reviews: Vec<MonthlyReview>,
 }
 
 /// Remplacement de toutes les données en une transaction (import).

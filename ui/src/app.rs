@@ -8,7 +8,8 @@ use crate::pages::{
     SettingsPage,
 };
 use crate::shell::{
-    BottomNav, Header, Onboarding, OnboardingOverlay, SessionGate, UpdateWatcher, Updates,
+    BottomNav, Header, Onboarding, OnboardingOverlay, Review, ReviewOverlay, ReviewWatcher,
+    SessionGate, UpdateWatcher, Updates,
 };
 use crate::state::{Privacy, Session, watch_visibility};
 
@@ -22,6 +23,7 @@ pub fn App() -> impl IntoView {
     Privacy::provide();
     Onboarding::provide();
     Updates::provide();
+    Review::provide();
     watch_visibility();
 
     view! {
@@ -45,6 +47,8 @@ pub fn App() -> impl IntoView {
                 </main>
                 <BottomNav />
                 <UpdateWatcher />
+                <ReviewWatcher />
+                <ReviewOverlay />
                 <OnboardingOverlay />
             </SessionGate>
         </Router>

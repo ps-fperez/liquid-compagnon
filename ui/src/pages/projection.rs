@@ -5,7 +5,9 @@ use lc_shared_dto::{
     ScenarioProjectionDto, ScenarioRatesDto, ScenarioRatesInput,
 };
 use leptos::prelude::*;
+use leptos_router::hooks::use_query_map;
 
+use super::goals::GoalsSection;
 use crate::api;
 use crate::charts::{LineChart, Series, to_f64};
 use crate::components::Busy;
@@ -57,8 +59,11 @@ pub fn ProjectionPage() -> impl IntoView {
     });
     reload.run(());
 
+    let open_new_goal =
+        use_query_map().with_untracked(|q| q.get("objectif").as_deref() == Some("nouveau"));
     view! {
         <h1 class="px-1 text-2xl font-medium">"Projection"</h1>
+        <GoalsSection open_new=open_new_goal />
         <div class="flex rounded-xl bg-surface p-1" role="tablist" aria-label="Horizon">
             {HORIZONS.into_iter().map(|months| view! {
                 <button

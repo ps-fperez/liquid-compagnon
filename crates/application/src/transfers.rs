@@ -165,13 +165,13 @@ impl TransferUseCases {
         match endpoint {
             Endpoint::Account(id) => match self.accounts.get(id)? {
                 Some(account) if !account.is_archived() => Ok(()),
-                _ => Err(AppError::InvalidTransferEndpoint),
+                _ => Err(AppError::UnavailableAccount),
             },
             Endpoint::External(id) => {
                 if self.repo.external_accounts()?.iter().any(|a| a.id() == id) {
                     Ok(())
                 } else {
-                    Err(AppError::InvalidTransferEndpoint)
+                    Err(AppError::UnavailableAccount)
                 }
             }
         }
@@ -312,7 +312,7 @@ mod tests {
         );
         assert_eq!(
             transfers.create_transfer(input(Endpoint::External(ExternalId::generate()))),
-            Err(AppError::InvalidTransferEndpoint)
+            Err(AppError::UnavailableAccount)
         );
     }
 

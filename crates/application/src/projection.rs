@@ -2,8 +2,10 @@
 
 use std::sync::Arc;
 
-use lc_domain::account::Scenario;
+use chrono::NaiveDate;
+use lc_domain::account::{Account, Scenario};
 use lc_domain::projection::{Projection, ProjectionInput, project_all};
+use lc_domain::valuation::AccountValuation;
 use lc_domain::{Money, Month};
 
 use crate::AppResult;
@@ -61,40 +63,64 @@ impl ProjectionUseCases {
     }
 
     pub async fn projection(&self) -> AppResult<ProjectionReport> {
-        let today = self.clock.today();
-        let accounts = self.accounts.list()?;
-        let (valued, pricing_issues) = value_active_accounts(
-            accounts.clone(),
-            &self.pricing,
-            &build_ledger(self.budget.as_ref(), self.transfers.as_ref(), today)?,
-            false,
-        )
-        .await?;
-        let budget = summarize(
+        let prepared = prepare(
+            self.accounts.as_ref(),
             self.budget.as_ref(),
             self.transfers.as_ref(),
-            self.accounts.as_ref(),
-            Month::of(today),
-            today,
-        )?;
-        let mut input = ProjectionInput::from_accounts(
-            valued
-                .iter()
-                .map(|(account, valuation)| (account, valuation.value)),
-            budget.savings_capacity,
-            Month::of(today),
-        );
-        add_projection_flows(&mut input, &accounts, &self.transfers.transfers()?);
+            &self.pricing,
+            self.clock.today(),
+        )
+        .await?;
         Ok(ProjectionReport {
-            scenarios: project_all(&input, Self::MONTHS),
-            savings_capacity: budget.savings_capacity,
-            total_contributions: input.total_contributions(),
-            contributions_excess: input.contributions_excess(),
-            pricing_issues,
+            scenarios: project_all(&prepared.input, Self::MONTHS),
+            savings_capacity: prepared.savings_capacity,
+            total_contributions: prepared.input.total_contributions(),
+            contributions_excess: prepared.input.contributions_excess(),
+            pricing_issues: prepared.pricing_issues,
         })
     }
 }
 
+/// Données d'entrée d'une projection : comptes actifs valorisés, capacité d'épargne du mois et
+/// virements récurrents.
+pub(crate) struct PreparedProjection {
+    pub input: ProjectionInput,
+    pub valued: Vec<(Account, AccountValuation)>,
+    pub savings_capacity: Money,
+    pub pricing_issues: Vec<PricingIssue>,
+}
+
+pub(crate) async fn prepare(
+    accounts: &dyn AccountRepository,
+    budget: &dyn BudgetRepository,
+    transfers: &dyn TransferRepository,
+    pricing: &PricingService,
+    today: NaiveDate,
+) -> AppResult<PreparedProjection> {
+    let all = accounts.list()?;
+    let (valued, pricing_issues) = value_active_accounts(
+        all.clone(),
+        pricing,
+        &build_ledger(budget, transfers, today)?,
+        false,
+    )
+    .await?;
+    let summary = summarize(budget, transfers, accounts, Month::of(today), today)?;
+    let mut input = ProjectionInput::from_accounts(
+        valued
+            .iter()
+            .map(|(account, valuation)| (account, valuation.value)),
+        summary.savings_capacity,
+        Month::of(today),
+    );
+    add_projection_flows(&mut input, &all, &transfers.transfers()?);
+    Ok(PreparedProjection {
+        input,
+        valued,
+        savings_capacity: summary.savings_capacity,
+        pricing_issues,
+    })
+}
 #[cfg(test)]
 mod tests {
     use super::*;

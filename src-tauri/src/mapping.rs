@@ -5,8 +5,10 @@ use std::collections::HashMap;
 
 use lc_application::budget::{BudgetSummary, ExpenseList};
 use lc_application::dashboard::{Dashboard, Variation};
+use lc_application::goals::GoalProgress;
 use lc_application::pricing::PricingIssue;
 use lc_application::projection::ProjectionReport;
+use lc_application::review::{MonthReport, StartPrompt};
 use lc_domain::account::{
     Account, AccountKind, AccountType, AssetRef, CurrencyCode, QuoteSource, Scenario, ScenarioRates,
 };
@@ -14,12 +16,13 @@ use lc_domain::budget::{
     Category, Expense, OneOffIncome, Pace, Period, Periodicity, RecurringCharge, SalaryEntry,
     SpendingAllowance,
 };
+use lc_domain::goal::GoalStatus;
 use lc_domain::ledger::{Movement, MovementKind};
 use lc_domain::transfer::{Endpoint, ExternalAccount, Schedule, Transfer};
 use lc_domain::valuation::{
     AccountValuation, FundValuation, NavKind, PositionValuation, Provenance,
 };
-use lc_domain::{AccountId, Decimal, ExternalId, Money, Month, Rate, Uuid};
+use lc_domain::{AccountId, CategoryId, Decimal, ExternalId, Money, Month, Rate, Uuid};
 use lc_shared_dto::*;
 
 use crate::error::{CommandResult, app_error, invalid};
@@ -580,6 +583,95 @@ pub fn projection_dto(report: &ProjectionReport, accounts: &[Account]) -> Projec
     }
 }
 
+pub fn goal_dto(progress: &GoalProgress, accounts: &[Account]) -> GoalDto {
+    let goal = &progress.goal;
+    GoalDto {
+        id: goal.id().to_string(),
+        name: goal.name().to_string(),
+        target: goal.target().amount(),
+        deadline: goal.deadline().map(|m| m.to_string()),
+        account_ids: goal.accounts().iter().map(ToString::to_string).collect(),
+        account_names: goal
+            .accounts()
+            .iter()
+            .filter_map(|id| accounts.iter().find(|a| a.id() == *id))
+            .map(|a| a.name().to_string())
+            .collect(),
+        current: progress.current.amount(),
+        percent: progress.percent,
+        remaining: progress.remaining.amount(),
+        required_monthly: progress.required_monthly.map(|m| m.amount()),
+        contributed_monthly: progress.contributed_monthly.amount(),
+        arrivals: progress.arrivals.map(|m| m.map(|m| m.to_string())),
+        status: match progress.status {
+            GoalStatus::Reached => GoalStatusDto::Reached,
+            GoalStatus::OnTrack => GoalStatusDto::OnTrack,
+            GoalStatus::Late => GoalStatusDto::Late,
+            GoalStatus::Open => GoalStatusDto::Open,
+        },
+        just_reached: progress.just_reached,
+    }
+}
+
+fn category_name(categories: &[Category], id: CategoryId) -> String {
+    categories
+        .iter()
+        .find(|c| c.id() == id)
+        .map_or_else(String::new, |c| c.name().to_string())
+}
+
+pub fn month_report_dto(report: &MonthReport, categories: &[Category]) -> MonthReportDto {
+    MonthReportDto {
+        month: report.month.to_string(),
+        saved: report.saved.amount(),
+        previous_saved: report.previous_saved.map(|m| m.amount()),
+        received: report.received.amount(),
+        one_off_incomes: report.one_off_incomes.amount(),
+        fixed_charges: report.fixed_charges.amount(),
+        expenses: report.expenses.amount(),
+        external_out: report.external_out.amount(),
+        top_categories: report
+            .top_categories
+            .iter()
+            .map(|(id, amount)| CategoryAmountDto {
+                id: id.to_string(),
+                name: category_name(categories, *id),
+                amount: amount.amount(),
+            })
+            .collect(),
+        biggest_increase: report
+            .biggest_increase
+            .map(|(id, percent)| (category_name(categories, id), percent)),
+        wealth_end: report.wealth_end.map(|m| m.amount()),
+        wealth_change: report.wealth_change.map(|m| m.amount()),
+        wealth_change_percent: report.wealth_change_percent,
+        goals: report
+            .goals
+            .iter()
+            .map(|g| GoalMonthDto {
+                name: g.name.to_string(),
+                percent: g.percent,
+                previous_percent: g.previous_percent,
+            })
+            .collect(),
+    }
+}
+
+pub fn start_prompt_dto(prompt: &StartPrompt) -> StartPromptDto {
+    StartPromptDto {
+        account_name: prompt.account_name.to_string(),
+        suggested: prompt.suggested.amount(),
+        included: prompt
+            .included
+            .iter()
+            .map(|t| IncludedTransferDto {
+                counterpart: t.counterpart.clone(),
+                amount: t.amount.amount(),
+                date: t.date,
+            })
+            .collect(),
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

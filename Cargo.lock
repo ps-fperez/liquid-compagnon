@@ -2275,7 +2275,7 @@ checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 
 [[package]]
 name = "lc-application"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2291,7 +2291,7 @@ dependencies = [
 
 [[package]]
 name = "lc-domain"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "proptest",
@@ -2303,7 +2303,7 @@ dependencies = [
 
 [[package]]
 name = "lc-infrastructure"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "argon2",
  "async-trait",
@@ -2326,7 +2326,7 @@ dependencies = [
 
 [[package]]
 name = "lc-shared-dto"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "rust_decimal",
@@ -2337,7 +2337,7 @@ dependencies = [
 
 [[package]]
 name = "lc-ui"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "console_error_panic_hook",
@@ -2595,7 +2595,7 @@ checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
 
 [[package]]
 name = "liquid-compagnon"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "lc-application",

@@ -9,6 +9,7 @@ use leptos::task::spawn_local;
 use leptos_router::components::A;
 
 use super::allowance::AllowanceCard;
+use super::goals::GoalsPreview;
 use crate::api;
 use crate::charts::{AllocationBar, AllocationSegment, LineChart, Series, to_f64};
 use crate::components::style::{BTN_ICON, SECTION_TITLE};
@@ -18,6 +19,7 @@ use crate::components::{
 use crate::components::{Notice, NoticeKind};
 use crate::format;
 use crate::icons::{Icon, IconName};
+use crate::shell::use_review;
 use crate::util::{current_month, pricing_issue_message};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,6 +93,15 @@ pub fn DashboardPage() -> impl IntoView {
             refreshing.set(false);
         });
     };
+    // Recalage du compte courant depuis le bilan : les soldes ont changé.
+    let review = use_review();
+    Effect::new(move |previous: Option<u32>| {
+        let restarts = review.restarts();
+        if previous.is_some_and(|p| p != restarts) {
+            fetch(false);
+        }
+        restarts
+    });
     fetch(false);
 
     view! {
@@ -160,6 +171,7 @@ fn Overview(
         </GlowCard>
 
         <AllowanceCard summary=dashboard.budget />
+        <GoalsPreview />
 
         {issues.into_iter().map(|message| {
             let key = format!("cours.{message}");
@@ -241,6 +253,35 @@ fn AccountRow(
     }
 }
 
+/// Bilans des mois passés (spec monthly-review : « Historique des bilans »).
+#[component]
+fn PastReviews() -> impl IntoView {
+    let review = use_review();
+    let months = RwSignal::new(None::<Result<Vec<String>, lc_shared_dto::ErrorDto>>);
+    crate::util::load(months, api::review_months);
+    move || {
+        let list = months.get().and_then(Result::ok).unwrap_or_default();
+        (!list.is_empty()).then(|| view! {
+            <div class="flex flex-col gap-2">
+                <span class="px-1 text-xs text-muted">"Bilans du mois"</span>
+                <div class="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+                    {list.into_iter().map(|month| {
+                        let label = format::month_label(&month);
+                        view! {
+                            <button
+                                class="min-h-11 shrink-0 rounded-xl border border-line bg-surface px-4 text-sm capitalize active:bg-surface-raised"
+                                on:click=move |_| review.open_month(month.clone())
+                            >
+                                {label}
+                            </button>
+                        }
+                    }).collect_view()}
+                </div>
+            </div>
+        })
+    }
+}
+
 #[component]
 fn History(points: Vec<HistoryPointDto>, on_snapshot: Callback<()>) -> impl IntoView {
     let period = RwSignal::new(Period::SixMonths);
@@ -295,6 +336,7 @@ fn History(points: Vec<HistoryPointDto>, on_snapshot: Callback<()>) -> impl Into
                     view! { <LineChart series=vec![series] x_labels=labels description="Évolution du patrimoine" /> }.into_any()
                 }}
             </Card>
+            <PastReviews />
         </section>
     }
 }

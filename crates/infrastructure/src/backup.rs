@@ -9,7 +9,7 @@ type Migration = fn(&mut Value) -> Result<(), String>;
 
 /// `MIGRATIONS[i]` fait passer un export de la version `i + 1` à la version `i + 2`.
 /// Il en faut exactement `SCHEMA_VERSION - 1`.
-const MIGRATIONS: &[Migration] = &[v1_to_v2, v2_to_v3];
+const MIGRATIONS: &[Migration] = &[v1_to_v2, v2_to_v3, v3_to_v4];
 
 /// Version 2 : comptes courants et rattachement des mouvements. Les nouveaux champs sont
 /// facultatifs : un export v1 est valide tel quel (aucun compte courant, aucun rattachement).
@@ -20,6 +20,11 @@ fn v1_to_v2(_: &mut Value) -> Result<(), String> {
 /// Version 3 : virements, comptes hors patrimoine, prélèvements, livrets génériques. Nouveaux
 /// champs facultatifs ; les versements programmés sont convertis après l'import.
 fn v2_to_v3(_: &mut Value) -> Result<(), String> {
+    Ok(())
+}
+
+/// Version 4 : objectifs d'épargne et bilans du mois, listes facultatives (vides avant).
+fn v3_to_v4(_: &mut Value) -> Result<(), String> {
     Ok(())
 }
 
@@ -105,7 +110,7 @@ mod tests {
 
         let bytes = codec.encode(&original).unwrap();
 
-        assert!(String::from_utf8_lossy(&bytes).contains("\"schema_version\": 3"));
+        assert!(String::from_utf8_lossy(&bytes).contains("\"schema_version\": 4"));
         assert_eq!(codec.decode(&bytes).unwrap(), original);
     }
 

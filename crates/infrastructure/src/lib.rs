@@ -13,6 +13,7 @@ pub use pricing::{CoinGeckoProvider, TwelveDataProvider, YahooFinanceProvider, h
 pub use security::Argon2PinHasher;
 pub use sqlite::{
     Database, SqliteAccountRepository, SqliteBudgetRepository, SqliteDatasetStore,
-    SqlitePriceCache, SqliteSettingsStore, SqliteSnapshotRepository, SqliteTransferRepository,
+    SqlitePlanningRepository, SqlitePriceCache, SqliteSettingsStore, SqliteSnapshotRepository,
+    SqliteTransferRepository,
 };
 pub use updates::{GithubReleaseFeed, HttpPackageDownloader, download_client};

@@ -2,6 +2,7 @@ use lc_application::ports::{Dataset, DatasetStore, StorageResult};
 
 use super::accounts::save_account;
 use super::budget::{save_category, save_charge, save_expense, save_one_off_income, save_salary};
+use super::planning::{save_goal, save_review};
 use super::snapshots::save_snapshot;
 use super::transfers::{save_external_account, save_transfer};
 use super::{Database, SqlResultExt};
@@ -22,7 +23,10 @@ impl DatasetStore for SqliteDatasetStore {
     fn replace_all(&self, data: &Dataset) -> StorageResult<()> {
         self.db.write(|tx| {
             tx.execute_batch(
-                "DELETE FROM transfers;
+                "DELETE FROM goal_accounts;
+                 DELETE FROM savings_goals;
+                 DELETE FROM monthly_reviews;
+                 DELETE FROM transfers;
                  DELETE FROM external_accounts;
                  DELETE FROM snapshot_lines;
                  DELETE FROM snapshots;
@@ -62,6 +66,12 @@ impl DatasetStore for SqliteDatasetStore {
             }
             for transfer in &data.transfers {
                 save_transfer(tx, transfer)?;
+            }
+            for goal in &data.goals {
+                save_goal(tx, goal)?;
+            }
+            for review in &data.reviews {
+                save_review(tx, review)?;
             }
             Ok(())
         })

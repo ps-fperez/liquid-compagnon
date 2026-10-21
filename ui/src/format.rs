@@ -191,6 +191,13 @@ pub fn shift_month(iso_month: &str, months: i32) -> Option<String> {
     ))
 }
 
+/// Nombre de mois de `from` à `to` (« 2026-10 » → « 2028-12 » : 26), si les deux sont valides.
+pub fn months_between(from: &str, to: &str) -> Option<i32> {
+    let (fy, fm) = parse_iso_month(from)?;
+    let (ty, tm) = parse_iso_month(to)?;
+    Some((ty * 12 + tm as i32) - (fy * 12 + fm as i32))
+}
+
 /// Mois ISO d'une date.
 pub fn iso_month(value: NaiveDate) -> String {
     format!("{:04}-{:02}", value.year(), value.month())

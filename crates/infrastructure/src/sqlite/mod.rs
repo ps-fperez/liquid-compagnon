@@ -4,6 +4,7 @@
 mod accounts;
 mod budget;
 mod dataset;
+mod planning;
 mod price_cache;
 mod settings;
 mod snapshots;
@@ -23,6 +24,7 @@ use rusqlite::{Connection, Transaction};
 pub use accounts::SqliteAccountRepository;
 pub use budget::SqliteBudgetRepository;
 pub use dataset::SqliteDatasetStore;
+pub use planning::SqlitePlanningRepository;
 pub use price_cache::SqlitePriceCache;
 pub use settings::SqliteSettingsStore;
 pub use snapshots::SqliteSnapshotRepository;
@@ -33,6 +35,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/001_initial.sql"),
     include_str!("../../migrations/002_checking_account.sql"),
     include_str!("../../migrations/003_transfers.sql"),
+    include_str!("../../migrations/004_goals_and_reviews.sql"),
 ];
 
 /// Base de données de l'application, partagée entre les dépôts.

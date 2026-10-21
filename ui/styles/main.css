@@ -41,6 +41,28 @@
   --animate-page-forward: page-forward 0.22s ease-out 1;
   --animate-page-back: page-back 0.22s ease-out 1;
   --animate-halo: halo 0.5s ease-out 1;
+  /* Barre de progression d'une carte du bilan (durée d'affichage d'une carte). */
+  --animate-story: story 5s linear 1 both;
+  --animate-ring-glow: ring-glow 1.6s ease-in-out 3;
+
+  @keyframes story {
+    from {
+      width: 0;
+    }
+    to {
+      width: 100%;
+    }
+  }
+
+  @keyframes ring-glow {
+    0%,
+    100% {
+      filter: drop-shadow(0 0 2px rgb(52 211 153 / 0.4));
+    }
+    50% {
+      filter: drop-shadow(0 0 10px rgb(52 211 153 / 0.9));
+    }
+  }
 
   @keyframes toast-in {
     from {

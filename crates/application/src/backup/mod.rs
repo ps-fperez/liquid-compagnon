@@ -11,12 +11,12 @@ pub use records::*;
 use crate::AppResult;
 use crate::flows::convert_scheduled_contributions;
 use crate::ports::{
-    AccountRepository, BackupCodec, BudgetRepository, Clock, Dataset, DatasetStore, SettingsStore,
-    SnapshotRepository, TransferRepository,
+    AccountRepository, BackupCodec, BudgetRepository, Clock, Dataset, DatasetStore,
+    PlanningRepository, SettingsStore, SnapshotRepository, TransferRepository,
 };
 
 /// Version du format d'export produit par cette version de l'application.
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: u32 = 4;
 
 /// Résumé d'un import réussi.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,6 +30,7 @@ pub struct BackupUseCases {
     accounts: Arc<dyn AccountRepository>,
     budget: Arc<dyn BudgetRepository>,
     transfers: Arc<dyn TransferRepository>,
+    planning: Arc<dyn PlanningRepository>,
     snapshots: Arc<dyn SnapshotRepository>,
     settings: Arc<dyn SettingsStore>,
     store: Arc<dyn DatasetStore>,
@@ -47,6 +48,7 @@ impl BackupUseCases {
         accounts: Arc<dyn AccountRepository>,
         budget: Arc<dyn BudgetRepository>,
         transfers: Arc<dyn TransferRepository>,
+        planning: Arc<dyn PlanningRepository>,
         snapshots: Arc<dyn SnapshotRepository>,
         settings: Arc<dyn SettingsStore>,
         store: Arc<dyn DatasetStore>,
@@ -57,6 +59,7 @@ impl BackupUseCases {
             accounts,
             budget,
             transfers,
+            planning,
             snapshots,
             settings,
             store,
@@ -85,6 +88,8 @@ impl BackupUseCases {
             snapshots: self.snapshots.list()?,
             transfers: self.transfers.transfers()?,
             external_accounts: self.transfers.external_accounts()?,
+            goals: self.planning.goals()?,
+            reviews: self.planning.reviews()?,
         };
         let now = self.clock.now();
         let bytes = self
@@ -311,6 +316,17 @@ mod tests {
             .create_account(new("Ancien PEA", AccountType::Pea))
             .unwrap();
         block_on(env.dashboard().dashboard(false)).unwrap(); // snapshot automatique
+        env.goals()
+            .create_goal(crate::goals::GoalInput {
+                name: "Apport immobilier".into(),
+                target: Money::new(dec!(30000)),
+                deadline: Some(Month::new(2028, 12).unwrap()),
+                accounts: vec![checking],
+            })
+            .unwrap();
+        let reviews = env.reviews();
+        reviews.open_review(Month::new(2026, 9).unwrap()).unwrap();
+        reviews.start_month(Money::new(dec!(250))).unwrap();
         accounts.archive_account(closed).unwrap();
     }
 
@@ -354,6 +370,15 @@ mod tests {
         );
         // Spec generic-accounts : « Aller-retour v3 »
         assert_eq!(
+            target.planning_repo.goals().unwrap(),
+            source.planning_repo.goals().unwrap()
+        );
+        assert_eq!(
+            target.planning_repo.reviews().unwrap(),
+            source.planning_repo.reviews().unwrap()
+        );
+        assert!(!target.planning_repo.reviews().unwrap().is_empty());
+        assert_eq!(
             target.transfers_repo.transfers().unwrap(),
             source.transfers_repo.transfers().unwrap()
         );
@@ -385,7 +410,7 @@ mod tests {
 
         assert!(!json.contains("secret-key"));
         assert!(!json.contains(&env.settings.pin_hash().unwrap().unwrap()));
-        assert!(json.contains("\"schema_version\":3"));
+        assert!(json.contains("\"schema_version\":4"));
         assert_eq!(
             env.settings.last_export_at().unwrap(),
             Some(env.clock.now())

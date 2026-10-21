@@ -25,6 +25,24 @@ where
     });
 }
 
+/// Comme `load`, puis appelle `then` sur le résultat réussi (notification, suite d'un parcours).
+pub fn load_then<T, Fut>(
+    target: Loaded<T>,
+    fetch: impl FnOnce() -> Fut + 'static,
+    then: impl FnOnce(&T) + 'static,
+) where
+    T: Send + Sync + 'static,
+    Fut: Future<Output = Result<T, ErrorDto>> + 'static,
+{
+    spawn_local(async move {
+        let result = fetch().await;
+        if let Ok(value) = &result {
+            then(value);
+        }
+        target.set(Some(result));
+    });
+}
+
 /// Exécute une action (enregistrement…) : empêche le double envoi, affiche l'erreur éventuelle,
 /// puis appelle `on_success`.
 pub fn run_action<T, Fut>(
