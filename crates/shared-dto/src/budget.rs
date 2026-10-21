@@ -12,6 +12,10 @@ pub struct BudgetSummaryDto {
     pub fixed_charges: Decimal,
     pub expenses: Decimal,
     pub average_expenses: Decimal,
+    /// Virements du mois vers des comptes hors patrimoine.
+    pub external_out: Decimal,
+    /// Virements du mois reçus de comptes hors patrimoine.
+    pub external_in: Decimal,
     pub savings_capacity: Decimal,
 }
 
@@ -59,6 +63,9 @@ pub struct ChargeDto {
     pub periodicity: PeriodicityDto,
     pub start: String,
     pub end: Option<String>,
+    /// Compte courant prélevé et jour du prélèvement.
+    pub debit_account_id: Option<String>,
+    pub debit_day: Option<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -138,6 +145,11 @@ pub struct ChargeInput {
     pub periodicity: PeriodicityDto,
     pub start: String,
     pub end: Option<String>,
+    /// Compte courant prélevé (avec `debit_day`), le cas échéant.
+    #[serde(default)]
+    pub debit_account_id: Option<String>,
+    #[serde(default)]
+    pub debit_day: Option<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

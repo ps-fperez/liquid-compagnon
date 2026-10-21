@@ -8,16 +8,17 @@ use lc_application::dashboard::{Dashboard, Variation};
 use lc_application::pricing::PricingIssue;
 use lc_application::projection::ProjectionReport;
 use lc_domain::account::{
-    Account, AccountKind, AccountType, AssetRef, CurrencyCode, MovementKind, QuoteSource, Scenario,
-    ScenarioRates,
+    Account, AccountKind, AccountType, AssetRef, CurrencyCode, QuoteSource, Scenario, ScenarioRates,
 };
 use lc_domain::budget::{
     Category, Expense, OneOffIncome, Periodicity, RecurringCharge, SalaryEntry,
 };
+use lc_domain::ledger::{Movement, MovementKind};
+use lc_domain::transfer::{Endpoint, ExternalAccount, Schedule, Transfer};
 use lc_domain::valuation::{
     AccountValuation, FundValuation, NavKind, PositionValuation, Provenance,
 };
-use lc_domain::{AccountId, Decimal, Month, Rate, Uuid};
+use lc_domain::{AccountId, Decimal, ExternalId, Money, Month, Rate, Uuid};
 use lc_shared_dto::*;
 
 use crate::error::{CommandResult, app_error, invalid};
@@ -59,6 +60,8 @@ pub fn account_type(dto: AccountTypeDto) -> AccountType {
         AccountTypeDto::Pei => AccountType::Pei,
         AccountTypeDto::Crypto => AccountType::Crypto,
         AccountTypeDto::Checking => AccountType::Checking,
+        AccountTypeDto::Livret => AccountType::Livret,
+        AccountTypeDto::AssuranceVie => AccountType::AssuranceVie,
     }
 }
 
@@ -99,6 +102,8 @@ pub fn account_type_dto(account_type: AccountType) -> AccountTypeDto {
         AccountType::Pei => AccountTypeDto::Pei,
         AccountType::Crypto => AccountTypeDto::Crypto,
         AccountType::Checking => AccountTypeDto::Checking,
+        AccountType::Livret => AccountTypeDto::Livret,
+        AccountType::AssuranceVie => AccountTypeDto::AssuranceVie,
     }
 }
 
@@ -182,6 +187,8 @@ pub fn budget_summary_dto(summary: &BudgetSummary) -> BudgetSummaryDto {
         expenses: summary.expenses.amount(),
         average_expenses: summary.average_expenses.amount(),
         savings_capacity: summary.savings_capacity.amount(),
+        external_out: summary.external_out.amount(),
+        external_in: summary.external_in.amount(),
     }
 }
 
@@ -252,36 +259,83 @@ fn fund_dto(account: &Account, fund: &FundValuation) -> FundDto {
     }
 }
 
-pub fn account_dto(account: &Account, valuation: &AccountValuation) -> AccountDto {
+/// Noms des comptes suivis et hors patrimoine, pour afficher le compte d'en face d'un virement.
+#[derive(Debug, Default)]
+pub struct Names(HashMap<Endpoint, String>);
+
+impl Names {
+    pub fn new(accounts: &[Account], externals: &[ExternalAccount]) -> Self {
+        let mut names = HashMap::new();
+        for account in accounts {
+            names.insert(Endpoint::Account(account.id()), account.name().to_string());
+        }
+        for external in externals {
+            names.insert(
+                Endpoint::External(external.id()),
+                external.name().to_string(),
+            );
+        }
+        Self(names)
+    }
+
+    pub fn of(&self, endpoint: Endpoint) -> String {
+        self.0
+            .get(&endpoint)
+            .cloned()
+            .unwrap_or_else(|| "Compte supprimé".into())
+    }
+}
+
+pub fn movement_dto(movement: &Movement, names: &Names) -> MovementDto {
+    MovementDto {
+        kind: match movement.kind {
+            MovementKind::Expense => MovementKindDto::Expense,
+            MovementKind::Income => MovementKindDto::Income,
+            MovementKind::Charge => MovementKindDto::Charge,
+            MovementKind::TransferIn => MovementKindDto::TransferIn,
+            MovementKind::TransferOut => MovementKindDto::TransferOut,
+        },
+        amount: movement.signed_amount().amount(),
+        date: movement.date,
+        label: movement.label.clone(),
+        counterpart: movement.counterpart.map(|endpoint| names.of(endpoint)),
+    }
+}
+
+pub fn account_dto(account: &Account, valuation: &AccountValuation, names: &Names) -> AccountDto {
+    let movements = || {
+        valuation
+            .movements
+            .iter()
+            .map(|m| movement_dto(m, names))
+            .collect()
+    };
     let details = match account.kind() {
         AccountKind::Savings(d) => AccountDetailsDto::Savings {
-            balance: d.balance().amount(),
+            balance: valuation.value.amount(),
+            reference_balance: d.balance().amount(),
             rate_percent: d.rate().as_percent(),
-            deposit_ceiling: d.deposit_ceiling().amount(),
+            deposit_ceiling: d.deposit_ceiling().map(|c| c.amount()),
             balance_updated_on: d.balance_updated_on(),
-            ceiling_reached: d.is_ceiling_reached(),
+            ceiling_reached: d.is_ceiling_reached(valuation.value),
+            movements: movements(),
         },
         AccountKind::Securities(d) => AccountDetailsDto::Securities {
-            cash: d.cash().amount(),
+            cash: (d.cash()
+                + valuation
+                    .movements
+                    .iter()
+                    .map(Movement::signed_amount)
+                    .sum::<Money>())
+            .amount(),
             positions: valuation.positions.iter().map(position_dto).collect(),
+            movements: movements(),
         },
         AccountKind::Checking(d) => AccountDetailsDto::Checking {
             balance: valuation.value.amount(),
             reference_balance: d.reference_balance().amount(),
             reference_on: d.reference_on(),
-            movements: valuation
-                .movements
-                .iter()
-                .map(|m| CheckingMovementDto {
-                    kind: match m.kind {
-                        MovementKind::Expense => MovementKindDto::Expense,
-                        MovementKind::Income => MovementKindDto::Income,
-                    },
-                    amount: m.signed_amount().amount(),
-                    date: m.date,
-                    label: m.label.clone(),
-                })
-                .collect(),
+            movements: movements(),
         },
         AccountKind::EmployeeSavings(_) => AccountDetailsDto::EmployeeSavings {
             funds: valuation
@@ -297,7 +351,6 @@ pub fn account_dto(account: &Account, valuation: &AccountValuation) -> AccountDt
         color: account.color().to_string(),
         account_type: account_type_dto(account.account_type()),
         archived: account.is_archived(),
-        monthly_contribution: account.monthly_contribution().amount(),
         scenario_rates: scenario_rates_dto(account.scenario_rates()),
         value: valuation.value.amount(),
         provenance: provenance_dto(valuation.provenance),
@@ -305,6 +358,73 @@ pub fn account_dto(account: &Account, valuation: &AccountValuation) -> AccountDt
     }
 }
 
+pub fn endpoint(dto: &EndpointDto) -> CommandResult<Endpoint> {
+    Ok(match dto {
+        EndpointDto::Account(raw) => Endpoint::Account(id(raw, AccountId::from_uuid)?),
+        EndpointDto::External(raw) => Endpoint::External(id(raw, ExternalId::from_uuid)?),
+    })
+}
+
+pub fn endpoint_dto(endpoint: Endpoint) -> EndpointDto {
+    match endpoint {
+        Endpoint::Account(id) => EndpointDto::Account(id.to_string()),
+        Endpoint::External(id) => EndpointDto::External(id.to_string()),
+    }
+}
+
+pub fn schedule(dto: &ScheduleDto) -> CommandResult<Schedule> {
+    Ok(match dto {
+        ScheduleDto::Once { date } => Schedule::Once { date: *date },
+        ScheduleDto::Monthly { day, from, until } => Schedule::Monthly {
+            day: *day,
+            from: month(from)?,
+            until: until.as_deref().map(month).transpose()?,
+        },
+        ScheduleDto::Yearly {
+            month,
+            day,
+            from_year,
+            until_year,
+        } => Schedule::Yearly {
+            month: *month,
+            day: *day,
+            from_year: *from_year,
+            until_year: *until_year,
+        },
+    })
+}
+
+pub fn transfer_dto(transfer: &Transfer, names: &Names) -> TransferDto {
+    TransferDto {
+        id: transfer.id().to_string(),
+        from: endpoint_dto(transfer.from()),
+        to: endpoint_dto(transfer.to()),
+        from_name: names.of(transfer.from()),
+        to_name: names.of(transfer.to()),
+        sent: transfer.sent().amount(),
+        received: transfer.received().amount(),
+        label: transfer.label().map(ToString::to_string),
+        schedule: match transfer.schedule() {
+            Schedule::Once { date } => ScheduleDto::Once { date },
+            Schedule::Monthly { day, from, until } => ScheduleDto::Monthly {
+                day,
+                from: from.to_string(),
+                until: until.map(|m| m.to_string()),
+            },
+            Schedule::Yearly {
+                month,
+                day,
+                from_year,
+                until_year,
+            } => ScheduleDto::Yearly {
+                month,
+                day,
+                from_year,
+                until_year,
+            },
+        },
+    }
+}
 pub fn category_dto(category: &Category) -> CategoryDto {
     CategoryDto {
         id: category.id().to_string(),
@@ -345,6 +465,8 @@ pub fn charge_dto(charge: &RecurringCharge) -> ChargeDto {
         },
         start: charge.start().to_string(),
         end: charge.end().map(|end| end.to_string()),
+        debit_account_id: charge.debit().map(|debit| debit.account.to_string()),
+        debit_day: charge.debit().map(|debit| debit.day),
     }
 }
 
@@ -414,9 +536,10 @@ pub fn projection_dto(report: &ProjectionReport, accounts: &[Account]) -> Projec
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lc_domain::account::{CheckingLedger, Position};
+    use lc_domain::account::Position;
+    use lc_domain::ledger::Ledger;
     use lc_domain::valuation::{PriceBook, Quote, QuoteFreshness, value_account};
-    use lc_domain::{CategoryId, Label, Money, NaiveDate, defaults};
+    use lc_domain::{CategoryId, Label, NaiveDate, defaults};
     use lc_shared_dto::ErrorCode;
     use rust_decimal_macros::dec;
 
@@ -477,7 +600,8 @@ mod tests {
 
         let dto = account_dto(
             &wallet,
-            &value_account(&wallet, &prices, &CheckingLedger::default()),
+            &value_account(&wallet, &prices, &Ledger::default()),
+            &Names::default(),
         );
 
         assert_eq!(dto.value, dec!(9000));

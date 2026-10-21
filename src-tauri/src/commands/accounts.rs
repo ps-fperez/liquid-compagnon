@@ -5,6 +5,7 @@ use lc_domain::account::AccountType;
 use lc_domain::{AccountId, FundId, Money};
 use lc_shared_dto::*;
 
+use super::transfers::names;
 use super::{AppState, blocking, unlocked};
 use crate::error::{CommandResult, app_error};
 use crate::mapping::{self, asset, id};
@@ -15,6 +16,7 @@ pub async fn list_accounts(
     input: IncludeArchivedInput,
 ) -> CommandResult<AccountListDto> {
     let services = unlocked(&state)?;
+    let names = names(&services)?;
     let valued = services
         .accounts
         .valued_accounts(input.include_archived)
@@ -24,7 +26,7 @@ pub async fn list_accounts(
         accounts: valued
             .accounts
             .iter()
-            .map(|(account, valuation)| mapping::account_dto(account, valuation))
+            .map(|(account, valuation)| mapping::account_dto(account, valuation, &names))
             .collect(),
         pricing_issues: mapping::pricing_issues_dto(&valued.pricing_issues),
     })
@@ -39,7 +41,11 @@ pub async fn get_account(state: AppState<'_>, input: IdInput) -> CommandResult<A
         .valued_account(account_id)
         .await
         .map_err(app_error)?;
-    Ok(mapping::account_dto(&account, &valuation))
+    Ok(mapping::account_dto(
+        &account,
+        &valuation,
+        &names(&services)?,
+    ))
 }
 
 #[tauri::command]
@@ -51,7 +57,6 @@ pub async fn create_account(state: AppState<'_>, input: NewAccountInput) -> Comm
                 name: input.name,
                 account_type: mapping::account_type(input.account_type),
                 color: input.color,
-                monthly_contribution: Money::new(input.monthly_contribution),
             })
             .map_err(app_error)?;
         Ok(account_id.to_string())
@@ -70,7 +75,6 @@ pub async fn update_account(state: AppState<'_>, input: AccountUpdateInput) -> C
                 AccountUpdate {
                     name: input.name,
                     color: input.color,
-                    monthly_contribution: Money::new(input.monthly_contribution),
                 },
             )
             .map_err(app_error)
@@ -141,7 +145,7 @@ pub async fn set_savings_terms(state: AppState<'_>, input: SavingsTermsInput) ->
             .set_savings_terms(
                 id(&input.account_id, AccountId::from_uuid)?,
                 mapping::rate(input.rate_percent)?,
-                Money::new(input.deposit_ceiling),
+                input.deposit_ceiling.map(Money::new),
             )
             .map_err(app_error)
     })

@@ -131,6 +131,8 @@ commands_without_input! {
     /// Télécharge, vérifie et ouvre l'installeur Android (progression : update-progress).
     install_update -> InstallOutcomeDto;
     expense_suggestions -> Vec<LabelSuggestionDto>;
+    // Virements
+    list_external_accounts -> Vec<ExternalAccountDto>;
 }
 
 commands_with_input! {
@@ -165,6 +167,15 @@ commands_with_input! {
     update_pei_fund(FundUpdateInput) -> ();
     record_pei_nav(FundNavInput) -> ();
     remove_pei_fund(FundRefInput) -> ();
+    // Virements et comptes hors patrimoine
+    /// Virements d'un compte, ou tous sans compte.
+    list_transfers(Option<EndpointDto>) -> Vec<TransferDto>;
+    /// Renvoie l'identifiant du virement.
+    save_transfer(TransferInput) -> String;
+    delete_transfer(IdInput) -> ();
+    create_external_account(NameInput) -> String;
+    rename_external_account(RenameInput) -> ();
+    delete_external_account(IdInput) -> ();
     // Budget
     budget_summary(MonthInput) -> BudgetSummaryDto;
     list_categories(IncludeArchivedInput) -> Vec<CategoryDto>;

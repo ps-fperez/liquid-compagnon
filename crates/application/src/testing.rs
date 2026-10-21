@@ -8,9 +8,11 @@ use async_trait::async_trait;
 use chrono::{DateTime, Duration, NaiveDate, Utc};
 use lc_domain::account::{Account, AssetRef, CurrencyCode, QuoteSource};
 use lc_domain::budget::{Category, Expense, OneOffIncome, RecurringCharge, SalaryEntry};
+use lc_domain::transfer::{ExternalAccount, Transfer};
 use lc_domain::valuation::{Quote, QuoteFreshness};
 use lc_domain::{
-    AccountId, CategoryId, ChargeId, Decimal, ExpenseId, IncomeId, Money, SalaryId, Snapshot,
+    AccountId, CategoryId, ChargeId, Decimal, ExpenseId, ExternalId, IncomeId, Money, SalaryId,
+    Snapshot, TransferId,
 };
 
 use crate::accounts::AccountUseCases;
@@ -21,6 +23,7 @@ use crate::ports::*;
 use crate::pricing::PricingService;
 use crate::projection::ProjectionUseCases;
 use crate::security::SecurityUseCases;
+use crate::transfers::TransferUseCases;
 
 pub fn asset(source: QuoteSource, symbol: &str) -> AssetRef {
     AssetRef::new(source, symbol, "", CurrencyCode::eur()).unwrap()
@@ -379,10 +382,44 @@ impl BackupCodec for JsonCodec {
     }
 }
 
+#[derive(Default)]
+pub struct InMemoryTransfers {
+    transfers: Mutex<Vec<Transfer>>,
+    externals: Mutex<Vec<ExternalAccount>>,
+}
+
+impl TransferRepository for InMemoryTransfers {
+    fn transfers(&self) -> StorageResult<Vec<Transfer>> {
+        Ok(lock(&self.transfers).clone())
+    }
+    fn save_transfer(&self, transfer: &Transfer) -> StorageResult<()> {
+        upsert(&self.transfers, transfer, |t: &Transfer| {
+            t.id() == transfer.id()
+        });
+        Ok(())
+    }
+    fn delete_transfer(&self, id: TransferId) -> StorageResult<bool> {
+        Ok(remove(&self.transfers, |t: &Transfer| t.id() == id))
+    }
+    fn external_accounts(&self) -> StorageResult<Vec<ExternalAccount>> {
+        Ok(lock(&self.externals).clone())
+    }
+    fn save_external_account(&self, account: &ExternalAccount) -> StorageResult<()> {
+        upsert(&self.externals, account, |a: &ExternalAccount| {
+            a.id() == account.id()
+        });
+        Ok(())
+    }
+    fn delete_external_account(&self, id: ExternalId) -> StorageResult<bool> {
+        Ok(remove(&self.externals, |a: &ExternalAccount| a.id() == id))
+    }
+}
+
 pub struct InMemoryDatasetStore {
     accounts: Arc<InMemoryAccounts>,
     budget: Arc<InMemoryBudget>,
     snapshots: Arc<InMemorySnapshots>,
+    transfers: Arc<InMemoryTransfers>,
 }
 
 impl DatasetStore for InMemoryDatasetStore {
@@ -394,6 +431,8 @@ impl DatasetStore for InMemoryDatasetStore {
         *lock(&self.budget.charges) = data.charges.clone();
         *lock(&self.budget.expenses) = data.expenses.clone();
         *lock(&self.snapshots.0) = data.snapshots.clone();
+        *lock(&self.transfers.transfers) = data.transfers.clone();
+        *lock(&self.transfers.externals) = data.external_accounts.clone();
         Ok(())
     }
 }
@@ -405,6 +444,7 @@ pub struct TestEnv {
     pub accounts: Arc<InMemoryAccounts>,
     pub budget_repo: Arc<InMemoryBudget>,
     pub snapshots: Arc<InMemorySnapshots>,
+    pub transfers_repo: Arc<InMemoryTransfers>,
     pub cache: Arc<InMemoryPriceCache>,
     pub settings: Arc<InMemorySettings>,
     pub coingecko: Arc<FakeProvider>,
@@ -445,6 +485,7 @@ impl TestEnv {
             accounts: Arc::default(),
             budget_repo: Arc::default(),
             snapshots: Arc::default(),
+            transfers_repo: Arc::default(),
             cache: Arc::default(),
             settings: Arc::default(),
         }
@@ -470,6 +511,7 @@ impl TestEnv {
         BudgetUseCases::new(
             self.budget_repo.clone(),
             self.accounts.clone(),
+            self.transfers_repo.clone(),
             self.clock.clone(),
         )
     }
@@ -478,6 +520,7 @@ impl TestEnv {
         AccountUseCases::new(
             self.accounts.clone(),
             self.budget_repo.clone(),
+            self.transfers_repo.clone(),
             self.pricing(),
             self.clock.clone(),
         )
@@ -487,6 +530,7 @@ impl TestEnv {
         DashboardUseCases::new(
             self.accounts.clone(),
             self.budget_repo.clone(),
+            self.transfers_repo.clone(),
             self.snapshots.clone(),
             self.pricing(),
             self.clock.clone(),
@@ -497,7 +541,16 @@ impl TestEnv {
         ProjectionUseCases::new(
             self.accounts.clone(),
             self.budget_repo.clone(),
+            self.transfers_repo.clone(),
             self.pricing(),
+            self.clock.clone(),
+        )
+    }
+
+    pub fn transfers(&self) -> TransferUseCases {
+        TransferUseCases::new(
+            self.transfers_repo.clone(),
+            self.accounts.clone(),
             self.clock.clone(),
         )
     }
@@ -506,12 +559,14 @@ impl TestEnv {
         BackupUseCases::new(
             self.accounts.clone(),
             self.budget_repo.clone(),
+            self.transfers_repo.clone(),
             self.snapshots.clone(),
             self.settings.clone(),
             Arc::new(InMemoryDatasetStore {
                 accounts: self.accounts.clone(),
                 budget: self.budget_repo.clone(),
                 snapshots: self.snapshots.clone(),
+                transfers: self.transfers_repo.clone(),
             }),
             Arc::new(JsonCodec),
             self.clock.clone(),

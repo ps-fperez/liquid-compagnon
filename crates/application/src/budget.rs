@@ -5,13 +5,14 @@ use std::sync::Arc;
 use chrono::{DateTime, NaiveDate, Utc};
 use lc_domain::account::AccountType;
 use lc_domain::budget::{
-    BudgetCalculator, Category, Expense, OneOffIncome, Periodicity, RecurringCharge, SalaryEntry,
+    BudgetCalculator, Category, Debit, Expense, OneOffIncome, Periodicity, RecurringCharge,
+    SalaryEntry,
 };
 use lc_domain::{
     AccountId, CategoryId, ChargeId, ExpenseId, IncomeId, Label, Money, Month, SalaryId, defaults,
 };
 
-use crate::ports::{AccountRepository, BudgetRepository, Clock};
+use crate::ports::{AccountRepository, BudgetRepository, Clock, TransferRepository};
 use crate::{AppError, AppResult};
 
 /// Synthèse budgétaire d'un mois.
@@ -24,6 +25,10 @@ pub struct BudgetSummary {
     pub fixed_charges: Money,
     pub expenses: Money,
     pub average_expenses: Money,
+    /// Virements du mois vers des comptes hors patrimoine (compte joint…).
+    pub external_out: Money,
+    /// Virements du mois reçus de comptes hors patrimoine.
+    pub external_in: Money,
     pub savings_capacity: Money,
 }
 
@@ -54,6 +59,8 @@ pub struct ChargeInput {
     pub periodicity: Periodicity,
     pub start: Month,
     pub end: Option<Month>,
+    /// Compte courant sur lequel la charge est prélevée, et jour du prélèvement.
+    pub debit: Option<Debit>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,14 +74,20 @@ pub struct ExpenseInput {
     pub account: Option<AccountId>,
 }
 
-pub(crate) fn summarize(repo: &dyn BudgetRepository, month: Month) -> AppResult<BudgetSummary> {
-    let (salaries, incomes, charges, expenses) = (
+pub(crate) fn summarize(
+    repo: &dyn BudgetRepository,
+    transfers: &dyn TransferRepository,
+    month: Month,
+) -> AppResult<BudgetSummary> {
+    let (salaries, incomes, charges, expenses, transfers) = (
         repo.salaries()?,
         repo.one_off_incomes()?,
         repo.charges()?,
         repo.expenses()?,
+        transfers.transfers()?,
     );
-    let calculator = BudgetCalculator::new(&salaries, &incomes, &charges, &expenses);
+    let calculator =
+        BudgetCalculator::new(&salaries, &incomes, &charges, &expenses).with_transfers(&transfers);
     Ok(BudgetSummary {
         month,
         salary: calculator.salary_for(month),
@@ -83,6 +96,8 @@ pub(crate) fn summarize(repo: &dyn BudgetRepository, month: Month) -> AppResult<
         fixed_charges: calculator.fixed_charges_for(month),
         expenses: calculator.expenses_for(month),
         average_expenses: calculator.average_monthly_expenses(month),
+        external_out: calculator.external_out_for(month),
+        external_in: calculator.external_in_for(month),
         savings_capacity: calculator.savings_capacity(month),
     })
 }
@@ -91,6 +106,7 @@ pub struct BudgetUseCases {
     repo: Arc<dyn BudgetRepository>,
     /// Comptes courants auxquels les mouvements peuvent être rattachés.
     accounts: Arc<dyn AccountRepository>,
+    transfers: Arc<dyn TransferRepository>,
     clock: Arc<dyn Clock>,
 }
 
@@ -100,11 +116,13 @@ impl BudgetUseCases {
     pub fn new(
         repo: Arc<dyn BudgetRepository>,
         accounts: Arc<dyn AccountRepository>,
+        transfers: Arc<dyn TransferRepository>,
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
             repo,
             accounts,
+            transfers,
             clock,
         }
     }
@@ -112,6 +130,7 @@ impl BudgetUseCases {
     pub fn summary(&self, month: Option<Month>) -> AppResult<BudgetSummary> {
         summarize(
             self.repo.as_ref(),
+            self.transfers.as_ref(),
             month.unwrap_or_else(|| self.current_month()),
         )
     }
@@ -265,6 +284,17 @@ impl BudgetUseCases {
             None => None,
         };
         self.require_usable_category(input.category, previous_category)?;
+        let previous_debit = match id {
+            Some(id) => self
+                .repo
+                .charges()?
+                .into_iter()
+                .find(|c| c.id() == id)
+                .and_then(|c| c.debit())
+                .map(|d| d.account),
+            None => None,
+        };
+        self.require_checking_link(input.debit.map(|d| d.account), previous_debit)?;
         let charge = RecurringCharge::new(
             id.unwrap_or_else(ChargeId::generate),
             Label::new(&input.label)?,
@@ -273,7 +303,8 @@ impl BudgetUseCases {
             input.periodicity,
             input.start,
             input.end,
-        )?;
+        )?
+        .with_debit(input.debit)?;
         self.repo.save_charge(&charge)?;
         Ok(charge.id())
     }
@@ -738,6 +769,7 @@ mod tests {
                     periodicity: Periodicity::Monthly,
                     start: month(2026, 1),
                     end: None,
+                    debit: None,
                 },
             )
             .unwrap();

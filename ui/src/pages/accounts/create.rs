@@ -1,4 +1,4 @@
-use lc_shared_dto::{AccountTypeDto, Decimal, NewAccountInput};
+use lc_shared_dto::{AccountTypeDto, NewAccountInput};
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
 
@@ -7,7 +7,6 @@ use crate::components::Busy;
 use crate::components::style::{BTN_PRIMARY, LABEL};
 use crate::components::toast;
 use crate::components::{BottomSheet, Field};
-use crate::format;
 use crate::util::{ACCOUNT_COLORS, run_action};
 
 /// Couleur proposée par défaut pour chaque type (palette « Purple Electro »).
@@ -19,6 +18,8 @@ pub fn default_color(account_type: AccountTypeDto) -> &'static str {
         AccountTypeDto::Pei => "#60A5FA",
         AccountTypeDto::Crypto => "#7C3AED",
         AccountTypeDto::Checking => "#22D3EE",
+        AccountTypeDto::Livret => "#E879F9",
+        AccountTypeDto::AssuranceVie => "#38BDF8",
     }
 }
 
@@ -50,12 +51,22 @@ pub fn ColorPicker(selected: RwSignal<String>) -> impl IntoView {
     }
 }
 
-/// Lit un montant facultatif (vide = 0).
-pub fn optional_amount(raw: &str) -> Result<Decimal, String> {
-    if raw.trim().is_empty() {
-        Ok(Decimal::ZERO)
-    } else {
-        format::parse_amount(raw)
+/// Familles de comptes, dans l'ordre d'affichage à la création.
+const FAMILIES: [&str; 4] = ["Courant", "Livrets", "Placements", "Épargne salariale"];
+
+fn type_hint(account_type: AccountTypeDto) -> &'static str {
+    match account_type {
+        AccountTypeDto::Checking => "Le solde suit vos dépenses, charges prélevées et virements.",
+        AccountTypeDto::LivretA | AccountTypeDto::Ldds => {
+            "Taux et plafond réglementaires préremplis, modifiables ensuite."
+        }
+        AccountTypeDto::Livret => {
+            "Livret bancaire, Livret jeune, LEP… Taux et plafond à renseigner."
+        }
+        AccountTypeDto::Pea => "Positions cotées et espèces.",
+        AccountTypeDto::AssuranceVie => "Solde à mettre à jour, rendement de projection réglable.",
+        AccountTypeDto::Crypto => "Crypto-actifs cotés en direct.",
+        AccountTypeDto::Pei => "PEE, PEI, PERCO : fonds et valeurs de part.",
     }
 }
 
@@ -67,7 +78,6 @@ pub fn CreateAccountSheet(open: RwSignal<bool>) -> impl IntoView {
     let account_type = RwSignal::new(AccountTypeDto::LivretA);
     let name = RwSignal::new(AccountTypeDto::LivretA.label().to_string());
     let color = RwSignal::new(default_color(AccountTypeDto::LivretA).to_string());
-    let contribution = RwSignal::new(String::new());
     let error = RwSignal::new(None::<String>);
     let busy = RwSignal::new(false);
 
@@ -84,15 +94,10 @@ pub fn CreateAccountSheet(open: RwSignal<bool>) -> impl IntoView {
     };
 
     let submit = move |_| {
-        let monthly_contribution = match optional_amount(&contribution.get_untracked()) {
-            Ok(amount) => amount,
-            Err(message) => return error.set(Some(message)),
-        };
         let input = NewAccountInput {
             name: name.get_untracked(),
             account_type: account_type.get_untracked(),
             color: Some(color.get_untracked()),
-            monthly_contribution,
         };
         run_action(
             busy,
@@ -110,35 +115,34 @@ pub fn CreateAccountSheet(open: RwSignal<bool>) -> impl IntoView {
     view! {
         <BottomSheet open=open title="Nouveau compte">
             <div class="flex flex-col gap-4">
-                <div class="flex flex-col gap-1.5">
-                    <span class=LABEL>"Type"</span>
-                    <div class="flex flex-wrap gap-2">
-                        {AccountTypeDto::ALL
-                            .into_iter()
-                            .map(|t| view! {
-                                <button
-                                    class=move || format!(
-                                        "min-h-11 rounded-xl border px-4 text-sm {}",
-                                        if account_type.get() == t { "border-primary bg-primary/15 text-ink" } else { "border-line text-muted" },
-                                    )
-                                    aria-pressed=move || (account_type.get() == t).to_string()
-                                    on:click=move |_| choose(t)
-                                >
-                                    {t.label()}
-                                </button>
-                            })
-                            .collect_view()}
-                    </div>
+                <div class="flex flex-col gap-3">
+                    {FAMILIES.into_iter().map(|family| view! {
+                        <div class="flex flex-col gap-1.5">
+                            <span class=LABEL>{family}</span>
+                            <div class="flex flex-wrap gap-2">
+                                {AccountTypeDto::ALL
+                                    .into_iter()
+                                    .filter(|t| t.family() == family)
+                                    .map(|t| view! {
+                                        <button
+                                            class=move || format!(
+                                                "min-h-11 rounded-xl border px-4 text-sm transition {}",
+                                                if account_type.get() == t { "border-primary bg-primary/15 text-ink" } else { "border-line text-muted" },
+                                            )
+                                            aria-pressed=move || (account_type.get() == t).to_string()
+                                            on:click=move |_| choose(t)
+                                        >
+                                            {t.label()}
+                                        </button>
+                                    })
+                                    .collect_view()}
+                            </div>
+                        </div>
+                    }).collect_view()}
+                    <p class="text-xs text-muted">{move || type_hint(account_type.get())}</p>
                 </div>
                 <Field label="Nom" value=name placeholder="PEA Bourso" />
                 <ColorPicker selected=color />
-                <Field
-                    label="Versement mensuel programmé (facultatif)"
-                    value=contribution
-                    input_mode="decimal"
-                    suffix="€"
-                    placeholder="0,00"
-                />
                 <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
                 <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit><Busy busy=busy />"Créer le compte"</button>
             </div>

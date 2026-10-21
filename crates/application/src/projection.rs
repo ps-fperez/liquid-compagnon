@@ -8,8 +8,9 @@ use lc_domain::{Money, Month};
 
 use crate::AppResult;
 use crate::budget::summarize;
-use crate::ports::{AccountRepository, BudgetRepository, Clock};
-use crate::pricing::{PricingIssue, PricingService, checking_ledger, value_active_accounts};
+use crate::flows::{add_projection_flows, build_ledger};
+use crate::ports::{AccountRepository, BudgetRepository, Clock, TransferRepository};
+use crate::pricing::{PricingIssue, PricingService, value_active_accounts};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectionReport {
@@ -35,6 +36,7 @@ impl ProjectionReport {
 pub struct ProjectionUseCases {
     accounts: Arc<dyn AccountRepository>,
     budget: Arc<dyn BudgetRepository>,
+    transfers: Arc<dyn TransferRepository>,
     pricing: Arc<PricingService>,
     clock: Arc<dyn Clock>,
 }
@@ -45,32 +47,42 @@ impl ProjectionUseCases {
     pub fn new(
         accounts: Arc<dyn AccountRepository>,
         budget: Arc<dyn BudgetRepository>,
+        transfers: Arc<dyn TransferRepository>,
         pricing: Arc<PricingService>,
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
             accounts,
             budget,
+            transfers,
             pricing,
             clock,
         }
     }
 
     pub async fn projection(&self) -> AppResult<ProjectionReport> {
+        let today = self.clock.today();
+        let accounts = self.accounts.list()?;
         let (valued, pricing_issues) = value_active_accounts(
-            self.accounts.list()?,
+            accounts.clone(),
             &self.pricing,
-            &checking_ledger(self.budget.as_ref())?,
+            &build_ledger(self.budget.as_ref(), self.transfers.as_ref(), today)?,
             false,
         )
         .await?;
-        let budget = summarize(self.budget.as_ref(), Month::of(self.clock.today()))?;
-        let input = ProjectionInput::from_accounts(
+        let budget = summarize(
+            self.budget.as_ref(),
+            self.transfers.as_ref(),
+            Month::of(today),
+        )?;
+        let mut input = ProjectionInput::from_accounts(
             valued
                 .iter()
                 .map(|(account, valuation)| (account, valuation.value)),
             budget.savings_capacity,
+            Month::of(today),
         );
+        add_projection_flows(&mut input, &accounts, &self.transfers.transfers()?);
         Ok(ProjectionReport {
             scenarios: project_all(&input, Self::MONTHS),
             savings_capacity: budget.savings_capacity,
@@ -87,9 +99,11 @@ mod tests {
     use crate::accounts::NewAccount;
     use crate::budget::ChargeInput;
     use crate::testing::TestEnv;
+    use crate::transfers::TransferInput;
     use lc_domain::account::AccountType;
     use lc_domain::budget::Periodicity;
     use lc_domain::projection::Horizon;
+    use lc_domain::transfer::{Endpoint, Schedule};
     use pollster::block_on;
     use rust_decimal_macros::dec;
 
@@ -112,18 +126,43 @@ mod tests {
                     periodicity: Periodicity::Monthly,
                     start: month(2026, 1),
                     end: None,
+                    debit: None,
                 },
             )
             .unwrap();
     }
 
+    /// Ouvre un compte alimenté chaque mois par virement depuis le compte courant (créé au besoin).
     fn open_with_contribution(env: &TestEnv, account_type: AccountType, contribution: Money) {
-        env.accounts()
-            .create_account(NewAccount {
-                name: account_type.label().into(),
-                account_type,
-                color: None,
-                monthly_contribution: contribution,
+        let accounts = env.accounts();
+        let open = |account_type: AccountType| {
+            accounts
+                .create_account(NewAccount {
+                    name: account_type.label().into(),
+                    account_type,
+                    color: None,
+                })
+                .unwrap()
+        };
+        let checking = accounts
+            .list_accounts(false)
+            .unwrap()
+            .into_iter()
+            .find(|a| a.account_type() == AccountType::Checking)
+            .map_or_else(|| open(AccountType::Checking), |a| a.id());
+        let target = open(account_type);
+        env.transfers()
+            .create_transfer(TransferInput {
+                from: Endpoint::Account(checking),
+                to: Endpoint::Account(target),
+                sent: contribution,
+                received: None,
+                label: None,
+                schedule: Schedule::Monthly {
+                    day: 1,
+                    from: Month::of(env.clock.today()),
+                    until: None,
+                },
             })
             .unwrap();
     }

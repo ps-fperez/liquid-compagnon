@@ -25,10 +25,14 @@ pub enum IconName {
     Check,
     Alert,
     Info,
+    Transfer,
+    ArrowIn,
+    ArrowOut,
+    Calendar,
 }
 
 impl IconName {
-    pub const ALL: [IconName; 21] = [
+    pub const ALL: [IconName; 25] = [
         IconName::Home,
         IconName::Wallet,
         IconName::Plus,
@@ -50,6 +54,10 @@ impl IconName {
         IconName::Check,
         IconName::Alert,
         IconName::Info,
+        IconName::Transfer,
+        IconName::ArrowIn,
+        IconName::ArrowOut,
+        IconName::Calendar,
     ];
 
     fn paths(self) -> &'static str {
@@ -103,6 +111,16 @@ impl IconName {
                 r#"<path d="M10.3 3.9 2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4.5M12 17h.01"/>"#
             }
             IconName::Info => r#"<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.5h.01"/>"#,
+            IconName::Transfer => r#"<path d="M4 8h14l-3.5-3.5"/><path d="M20 16H6l3.5 3.5"/>"#,
+            IconName::ArrowIn => {
+                r#"<path d="M12 4v13"/><path d="m6.5 11.5 5.5 5.5 5.5-5.5"/><path d="M5 20.5h14"/>"#
+            }
+            IconName::ArrowOut => {
+                r#"<path d="M12 17V4"/><path d="m6.5 9.5 5.5-5.5 5.5 5.5"/><path d="M5 20.5h14"/>"#
+            }
+            IconName::Calendar => {
+                r#"<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>"#
+            }
         }
     }
 }

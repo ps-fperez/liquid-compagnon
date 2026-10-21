@@ -4,6 +4,7 @@ use lc_domain::account::{
     NavAnchor, PeiFund, Position, SavingsDetails, SavingsProduct, ScenarioRates, SecuritiesDetails,
     SecuritiesProduct,
 };
+use lc_domain::ledger::BalanceReference;
 use lc_domain::{AccountId, Color, FundId, Label, Money, Rate};
 use rusqlite::{Connection, Row, params};
 
@@ -43,53 +44,57 @@ impl AccountRepository for SqliteAccountRepository {
 pub(crate) fn save_account(conn: &Connection, account: &Account) -> StorageResult<()> {
     let id = account.id().to_string();
     let rates = account.scenario_rates();
-    let (nature, product, balance, rate, ceiling, updated_on, cash, reference_at) =
-        match account.kind() {
-            AccountKind::Savings(d) => (
-                "savings",
-                Some(match d.product() {
-                    SavingsProduct::LivretA => "livret_a",
-                    SavingsProduct::Ldds => "ldds",
-                }),
-                Some(d.balance().amount().to_string()),
-                Some(d.rate().as_fraction().to_string()),
-                Some(d.deposit_ceiling().amount().to_string()),
-                Some(d.balance_updated_on().to_string()),
-                None,
-                None,
-            ),
-            AccountKind::Securities(d) => (
-                "securities",
-                Some(match d.product() {
-                    SecuritiesProduct::Pea => "pea",
-                    SecuritiesProduct::Crypto => "crypto",
-                }),
-                None,
-                None,
-                None,
-                None,
-                Some(d.cash().amount().to_string()),
-                None,
-            ),
-            AccountKind::EmployeeSavings(_) => {
-                ("employee_savings", None, None, None, None, None, None, None)
-            }
-            AccountKind::Checking(d) => (
-                "checking",
-                None,
-                Some(d.reference_balance().amount().to_string()),
-                None,
-                None,
-                Some(d.reference_on().to_string()),
-                None,
-                Some(d.reference_at().to_rfc3339()),
-            ),
-        };
+    let mut row = StoredKind::default();
+    match account.kind() {
+        AccountKind::Savings(d) => {
+            row.nature = "savings";
+            row.product = Some(match d.product() {
+                SavingsProduct::LivretA => "livret_a",
+                SavingsProduct::Ldds => "ldds",
+                SavingsProduct::Livret => "livret",
+                SavingsProduct::AssuranceVie => "assurance_vie",
+            });
+            row.balance = Some(d.balance().amount().to_string());
+            row.rate = Some(d.rate().as_fraction().to_string());
+            row.ceiling = d.deposit_ceiling().map(|c| c.amount().to_string());
+            row.updated_on = Some(d.balance_updated_on().to_string());
+            row.reference_at = Some(d.reference().at.to_rfc3339());
+        }
+        AccountKind::Securities(d) => {
+            row.nature = "securities";
+            row.product = Some(match d.product() {
+                SecuritiesProduct::Pea => "pea",
+                SecuritiesProduct::Crypto => "crypto",
+            });
+            row.cash = Some(d.cash().amount().to_string());
+            row.cash_on = Some(d.cash_reference().on.to_string());
+            row.cash_at = Some(d.cash_reference().at.to_rfc3339());
+        }
+        AccountKind::EmployeeSavings(_) => row.nature = "employee_savings",
+        AccountKind::Checking(d) => {
+            row.nature = "checking";
+            row.balance = Some(d.reference_balance().amount().to_string());
+            row.updated_on = Some(d.reference_on().to_string());
+            row.reference_at = Some(d.reference_at().to_rfc3339());
+        }
+    }
+    let StoredKind {
+        nature,
+        product,
+        balance,
+        rate,
+        ceiling,
+        updated_on,
+        cash,
+        reference_at,
+        cash_on,
+        cash_at,
+    } = row;
     conn.execute(
         "INSERT INTO accounts (id, name, color, nature, product, balance, rate, deposit_ceiling,
              balance_updated_on, cash, monthly_contribution, rate_pessimistic, rate_neutral,
-             rate_optimistic, archived, reference_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+             rate_optimistic, archived, reference_at, cash_on, cash_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
          ON CONFLICT(id) DO UPDATE SET
              name = excluded.name, color = excluded.color, nature = excluded.nature,
              product = excluded.product, balance = excluded.balance, rate = excluded.rate,
@@ -98,7 +103,8 @@ pub(crate) fn save_account(conn: &Connection, account: &Account) -> StorageResul
              monthly_contribution = excluded.monthly_contribution,
              rate_pessimistic = excluded.rate_pessimistic, rate_neutral = excluded.rate_neutral,
              rate_optimistic = excluded.rate_optimistic, archived = excluded.archived,
-             reference_at = excluded.reference_at",
+             reference_at = excluded.reference_at, cash_on = excluded.cash_on,
+             cash_at = excluded.cash_at",
         params![
             id,
             account.name().as_str(),
@@ -116,6 +122,8 @@ pub(crate) fn save_account(conn: &Connection, account: &Account) -> StorageResul
             rates.optimistic.as_fraction().to_string(),
             account.is_archived(),
             reference_at,
+            cash_on,
+            cash_at,
         ],
     )
     .db()?;
@@ -177,6 +185,21 @@ pub(crate) fn save_account(conn: &Connection, account: &Account) -> StorageResul
     Ok(())
 }
 
+/// Colonnes propres à la nature du compte.
+#[derive(Default)]
+struct StoredKind {
+    nature: &'static str,
+    product: Option<&'static str>,
+    balance: Option<String>,
+    rate: Option<String>,
+    ceiling: Option<String>,
+    updated_on: Option<String>,
+    cash: Option<String>,
+    reference_at: Option<String>,
+    cash_on: Option<String>,
+    cash_at: Option<String>,
+}
+
 // --- Lecture ------------------------------------------------------------------------------
 
 struct AccountRow {
@@ -191,6 +214,8 @@ struct AccountRow {
     balance_updated_on: Option<String>,
     cash: Option<String>,
     reference_at: Option<String>,
+    cash_on: Option<String>,
+    cash_at: Option<String>,
     monthly_contribution: String,
     rates: [String; 3],
     archived: bool,
@@ -210,6 +235,8 @@ impl AccountRow {
             balance_updated_on: row.get("balance_updated_on")?,
             cash: row.get("cash")?,
             reference_at: row.get("reference_at")?,
+            cash_on: row.get("cash_on")?,
+            cash_at: row.get("cash_at")?,
             monthly_contribution: row.get("monthly_contribution")?,
             rates: [
                 row.get("rate_pessimistic")?,
@@ -244,18 +271,23 @@ fn account_from_row(conn: &Connection, row: AccountRow) -> StorageResult<Account
             match product {
                 "livret_a" => SavingsProduct::LivretA,
                 "ldds" => SavingsProduct::Ldds,
+                "livret" => SavingsProduct::Livret,
+                "assurance_vie" => SavingsProduct::AssuranceVie,
                 other => return Err(corrupt(format!("livret inconnu « {other} »"))),
             },
-            money(&required(row.balance.clone(), "balance")?)?,
+            BalanceReference::new(
+                money(&required(row.balance.clone(), "balance")?)?,
+                date(&required(
+                    row.balance_updated_on.clone(),
+                    "balance_updated_on",
+                )?)?,
+                datetime(&required(row.reference_at.clone(), "reference_at")?)?,
+            ),
             domain(Rate::from_fraction(decimal(&required(
                 row.rate.clone(),
                 "rate",
             )?)?))?,
-            money(&required(row.deposit_ceiling.clone(), "deposit_ceiling")?)?,
-            date(&required(
-                row.balance_updated_on.clone(),
-                "balance_updated_on",
-            )?)?,
+            optional_money(row.deposit_ceiling.clone())?,
         ))?),
         ("securities", Some(product)) => AccountKind::Securities(domain(SecuritiesDetails::new(
             match product {
@@ -263,7 +295,11 @@ fn account_from_row(conn: &Connection, row: AccountRow) -> StorageResult<Account
                 "crypto" => SecuritiesProduct::Crypto,
                 other => return Err(corrupt(format!("compte-titres inconnu « {other} »"))),
             },
-            money(&required(row.cash.clone(), "cash")?)?,
+            BalanceReference::new(
+                money(&required(row.cash.clone(), "cash")?)?,
+                date(&required(row.cash_on.clone(), "cash_on")?)?,
+                datetime(&required(row.cash_at.clone(), "cash_at")?)?,
+            ),
             load_positions(conn, &row.id)?,
         ))?),
         ("checking", _) => AccountKind::Checking(domain(CheckingDetails::new(
@@ -438,14 +474,24 @@ mod tests {
         let repo = repo();
         let mut livret = open(AccountType::LivretA);
         livret
-            .update_savings_balance(Money::new(dec!(10640.25)), today())
+            .update_savings_balance(
+                Money::new(dec!(10640.25)),
+                today(),
+                today().and_hms_opt(9, 0, 0).unwrap().and_utc(),
+            )
             .unwrap();
         livret
             .set_monthly_contribution(Money::new(dec!(200)))
             .unwrap();
 
         let mut wallet = open(AccountType::Crypto);
-        wallet.set_cash(Money::new(dec!(12.5))).unwrap();
+        wallet
+            .set_cash(
+                Money::new(dec!(12.5)),
+                today(),
+                today().and_hms_opt(9, 0, 0).unwrap().and_utc(),
+            )
+            .unwrap();
         wallet
             .upsert_position(
                 Position::new(
@@ -533,5 +579,29 @@ mod tests {
         assert_eq!(stored.name().as_str(), "PEA Bourso");
         assert_eq!(stored, pea);
         assert_eq!(repo.list().unwrap().len(), 1);
+    }
+
+    // Spec generic-accounts : « LEP » et « Livret sans plafond »
+    #[test]
+    fn roundtrips_generic_livrets_and_life_insurance() {
+        let repo = repo();
+        let at = today().and_hms_opt(9, 0, 0).unwrap().and_utc();
+        let mut lep = open(AccountType::Livret);
+        lep.set_savings_terms(
+            Rate::from_percent(dec!(2.5)).unwrap(),
+            Some(Money::new(dec!(10000))),
+        )
+        .unwrap();
+        lep.update_savings_balance(Money::new(dec!(4200)), today(), at)
+            .unwrap();
+        let open_livret = open(AccountType::Livret);
+        let mut life = open(AccountType::AssuranceVie);
+        life.update_savings_balance(Money::new(dec!(25000)), today(), at)
+            .unwrap();
+        for account in [&lep, &open_livret, &life] {
+            repo.save(account).unwrap();
+        }
+
+        assert_eq!(repo.list().unwrap(), vec![lep, open_livret, life]);
     }
 }

@@ -63,6 +63,17 @@ impl Month {
         other.index() - self.index()
     }
 
+    /// Date du `day` du mois, ramenée au dernier jour si le mois est plus court (31 → 30, 28…).
+    pub fn day(&self, day: u8) -> NaiveDate {
+        let last = self
+            .next()
+            .first_day()
+            .pred_opt()
+            .expect("un mois a toujours une veille");
+        let wanted = u32::from(day.max(1)).min(last.day());
+        NaiveDate::from_ymd_opt(self.year, self.month, wanted).expect("jour borné au mois")
+    }
+
     pub fn contains(&self, date: NaiveDate) -> bool {
         Self::of(date) == *self
     }

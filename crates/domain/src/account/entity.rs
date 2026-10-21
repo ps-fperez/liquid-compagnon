@@ -5,6 +5,7 @@ use super::{
     PeiFund, Position, SavingsDetails, SavingsProduct, ScenarioRates, SecuritiesDetails,
     SecuritiesProduct,
 };
+use crate::ledger::BalanceReference;
 use crate::{AccountId, Color, DomainError, FundId, Label, Money, Rate, defaults};
 
 /// Compte d'épargne (agrégat). Toutes les modifications passent par ses méthodes, qui
@@ -33,8 +34,10 @@ impl Account {
         let kind = match account_type {
             AccountType::LivretA => empty_savings(SavingsProduct::LivretA, today),
             AccountType::Ldds => empty_savings(SavingsProduct::Ldds, today),
-            AccountType::Pea => empty_securities(SecuritiesProduct::Pea),
-            AccountType::Crypto => empty_securities(SecuritiesProduct::Crypto),
+            AccountType::Livret => empty_savings(SavingsProduct::Livret, today),
+            AccountType::AssuranceVie => empty_savings(SavingsProduct::AssuranceVie, today),
+            AccountType::Pea => empty_securities(SecuritiesProduct::Pea, today),
+            AccountType::Crypto => empty_securities(SecuritiesProduct::Crypto, today),
             AccountType::Pei => AccountKind::EmployeeSavings(EmployeeSavingsDetails::default()),
             // Solde nul au début du jour d'ouverture, en attendant le premier solde saisi.
             AccountType::Checking => AccountKind::Checking(
@@ -141,12 +144,15 @@ impl Account {
 
     // --- Livrets ---------------------------------------------------------------------------
 
+    /// Nouveau solde de référence d'un livret ou d'une assurance-vie : les virements déjà passés
+    /// sont réputés inclus dans ce solde.
     pub fn update_savings_balance(
         &mut self,
         balance: Money,
         on: NaiveDate,
+        at: DateTime<Utc>,
     ) -> Result<(), DomainError> {
-        self.savings_mut()?.update_balance(balance, on)
+        self.savings_mut()?.update_balance(balance, on, at)
     }
 
     /// Met à jour le taux et le plafond d'un livret. Si les rendements de projection suivaient le
@@ -154,7 +160,7 @@ impl Account {
     pub fn set_savings_terms(
         &mut self,
         rate: Rate,
-        deposit_ceiling: Money,
+        deposit_ceiling: Option<Money>,
     ) -> Result<(), DomainError> {
         let previous_rate = self.savings_mut()?.rate();
         self.savings_mut()?.update_terms(rate, deposit_ceiling)?;
@@ -182,8 +188,14 @@ impl Account {
 
     // --- PEA / crypto ----------------------------------------------------------------------
 
-    pub fn set_cash(&mut self, cash: Money) -> Result<(), DomainError> {
-        self.securities_mut()?.set_cash(cash)
+    /// Nouveau solde espèces de référence (les virements passés sont réputés inclus).
+    pub fn set_cash(
+        &mut self,
+        cash: Money,
+        on: NaiveDate,
+        at: DateTime<Utc>,
+    ) -> Result<(), DomainError> {
+        self.securities_mut()?.set_cash(cash, on, at)
     }
 
     /// Ajoute une position, ou remplace celle portant sur le même actif.
@@ -266,17 +278,26 @@ impl Account {
     }
 }
 
+/// Solde nul au début du jour d'ouverture : tout flux postérieur s'y ajoute.
+fn opening_reference(today: NaiveDate) -> BalanceReference {
+    BalanceReference::new(
+        Money::ZERO,
+        today,
+        today.and_time(chrono::NaiveTime::MIN).and_utc(),
+    )
+}
+
 fn empty_savings(product: SavingsProduct, today: NaiveDate) -> AccountKind {
     let (rate, ceiling) = defaults::savings_terms(product);
     AccountKind::Savings(
-        SavingsDetails::new(product, Money::ZERO, rate, ceiling, today)
+        SavingsDetails::new(product, opening_reference(today), rate, ceiling)
             .expect("les valeurs par défaut d'un livret sont valides"),
     )
 }
 
-fn empty_securities(product: SecuritiesProduct) -> AccountKind {
+fn empty_securities(product: SecuritiesProduct, today: NaiveDate) -> AccountKind {
     AccountKind::Securities(
-        SecuritiesDetails::new(product, Money::ZERO, Vec::new())
+        SecuritiesDetails::new(product, opening_reference(today), Vec::new())
             .expect("un solde espèces nul est valide"),
     )
 }
@@ -326,7 +347,10 @@ mod tests {
         };
 
         assert_eq!(details.rate(), defaults::livret_a_rate());
-        assert_eq!(details.deposit_ceiling(), defaults::livret_a_ceiling());
+        assert_eq!(
+            details.deposit_ceiling(),
+            Some(defaults::livret_a_ceiling())
+        );
         assert!(
             livret
                 .scenario_rates()
@@ -340,7 +364,11 @@ mod tests {
         let on = NaiveDate::from_ymd_opt(2026, 10, 21).unwrap();
 
         livret
-            .update_savings_balance(Money::new(dec!(10640)), on)
+            .update_savings_balance(
+                Money::new(dec!(10640)),
+                on,
+                on.and_hms_opt(9, 0, 0).unwrap().and_utc(),
+            )
             .unwrap();
 
         let AccountKind::Savings(details) = livret.kind() else {
@@ -356,7 +384,7 @@ mod tests {
 
         let mut following = open(AccountType::Ldds);
         following
-            .set_savings_terms(new_rate, defaults::ldds_ceiling())
+            .set_savings_terms(new_rate, Some(defaults::ldds_ceiling()))
             .unwrap();
         assert!(following.scenario_rates().is_uniform(new_rate));
 
@@ -364,7 +392,7 @@ mod tests {
         let custom = ScenarioRates::uniform(Rate::from_percent(dec!(1)).unwrap());
         customized.set_scenario_rates(custom);
         customized
-            .set_savings_terms(new_rate, defaults::ldds_ceiling())
+            .set_savings_terms(new_rate, Some(defaults::ldds_ceiling()))
             .unwrap();
         assert_eq!(customized.scenario_rates(), &custom);
     }
@@ -412,11 +440,19 @@ mod tests {
             Err(DomainError::WrongAccountKind)
         );
         assert_eq!(
-            livret.set_cash(Money::ZERO),
+            livret.set_cash(
+                Money::ZERO,
+                today(),
+                today().and_hms_opt(9, 0, 0).unwrap().and_utc()
+            ),
             Err(DomainError::WrongAccountKind)
         );
         assert_eq!(
-            open(AccountType::Pea).update_savings_balance(Money::ZERO, today()),
+            open(AccountType::Pea).update_savings_balance(
+                Money::ZERO,
+                today(),
+                today().and_hms_opt(9, 0, 0).unwrap().and_utc()
+            ),
             Err(DomainError::WrongAccountKind)
         );
     }

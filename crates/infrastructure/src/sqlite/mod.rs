@@ -7,6 +7,7 @@ mod dataset;
 mod price_cache;
 mod settings;
 mod snapshots;
+mod transfers;
 
 use std::fmt::Display;
 use std::path::Path;
@@ -25,11 +26,13 @@ pub use dataset::SqliteDatasetStore;
 pub use price_cache::SqlitePriceCache;
 pub use settings::SqliteSettingsStore;
 pub use snapshots::SqliteSnapshotRepository;
+pub use transfers::SqliteTransferRepository;
 
 /// Migrations appliquées dans l'ordre ; l'index + 1 est la version de schéma atteinte.
 const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/001_initial.sql"),
     include_str!("../../migrations/002_checking_account.sql"),
+    include_str!("../../migrations/003_transfers.sql"),
 ];
 
 /// Base de données de l'application, partagée entre les dépôts.

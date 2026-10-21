@@ -3,10 +3,11 @@
 use std::sync::Arc;
 
 use chrono::Duration;
-use lc_domain::account::{Account, AccountKind, AssetRef, CheckingLedger, QuoteSource};
+use lc_domain::account::{Account, AccountKind, AssetRef, QuoteSource};
+use lc_domain::ledger::Ledger;
 use lc_domain::valuation::{AccountValuation, PriceBook, QuoteFreshness, value_account};
 
-use crate::ports::{BudgetRepository, Clock, PriceCache, PriceError, PriceProvider};
+use crate::ports::{Clock, PriceCache, PriceError, PriceProvider};
 use crate::{AppError, AppResult};
 
 /// Problème rencontré lors d'un rafraîchissement : les valeurs restent affichées (cache ou prix
@@ -186,7 +187,7 @@ pub fn tracked_assets(accounts: &[Account]) -> Vec<AssetRef> {
 pub(crate) async fn value_active_accounts(
     accounts: Vec<Account>,
     pricing: &PricingService,
-    ledger: &CheckingLedger,
+    ledger: &Ledger,
     force_refresh: bool,
 ) -> AppResult<(Vec<(Account, AccountValuation)>, Vec<PricingIssue>)> {
     let active: Vec<Account> = accounts.into_iter().filter(|a| !a.is_archived()).collect();
@@ -201,14 +202,6 @@ pub(crate) async fn value_active_accounts(
         })
         .collect();
     Ok((valued, refresh.issues))
-}
-
-/// Dépenses et revenus ponctuels rattachés aux comptes courants.
-pub(crate) fn checking_ledger(budget: &dyn BudgetRepository) -> AppResult<CheckingLedger> {
-    Ok(CheckingLedger::from_budget(
-        &budget.expenses()?,
-        &budget.one_off_incomes()?,
-    ))
 }
 
 #[cfg(test)]

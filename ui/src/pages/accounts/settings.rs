@@ -1,16 +1,15 @@
 use lc_shared_dto::{AccountDto, AccountUpdateInput, IdInput};
 use leptos::prelude::*;
 
-use super::create::{ColorPicker, optional_amount};
+use super::create::ColorPicker;
 use crate::api;
 use crate::components::Busy;
 use crate::components::style::{BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY};
 use crate::components::toast;
 use crate::components::{BottomSheet, Field};
-use crate::format;
 use crate::util::run_action;
 
-/// Nom, couleur et versement mensuel programmé d'un compte.
+/// Nom et couleur d'un compte.
 #[component]
 pub fn AccountSettingsSheet(
     open: RwSignal<bool>,
@@ -19,20 +18,14 @@ pub fn AccountSettingsSheet(
 ) -> impl IntoView {
     let name = RwSignal::new(account.name.clone());
     let color = RwSignal::new(account.color.clone());
-    let contribution = RwSignal::new(format::quantity(account.monthly_contribution));
     let error = RwSignal::new(None::<String>);
     let busy = RwSignal::new(false);
     let account_id = StoredValue::new(account.id);
     let submit = move |_| {
-        let monthly_contribution = match optional_amount(&contribution.get_untracked()) {
-            Ok(amount) => amount,
-            Err(message) => return error.set(Some(message)),
-        };
         let input = AccountUpdateInput {
             account_id: account_id.get_value(),
             name: name.get_untracked(),
             color: color.get_untracked(),
-            monthly_contribution,
         };
         run_action(busy, error, api::update_account(input), move |()| {
             toast::success("Compte modifié");
@@ -45,8 +38,6 @@ pub fn AccountSettingsSheet(
             <div class="flex flex-col gap-4">
                 <Field label="Nom" value=name />
                 <ColorPicker selected=color />
-                <Field label="Versement mensuel programmé" value=contribution input_mode="decimal" suffix="€" />
-                <p class="text-xs text-muted">"Utilisé par la projection pour alimenter ce compte chaque mois."</p>
                 <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
                 <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit><Busy busy=busy />"Enregistrer"</button>
             </div>

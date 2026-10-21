@@ -1,7 +1,8 @@
 use rust_decimal::Decimal;
 
 use super::{NavKind, PriceBook, Provenance, estimate_nav};
-use crate::account::{Account, AccountKind, AssetRef, CheckingLedger, Movement, PeiFund, Position};
+use crate::account::{Account, AccountKind, AssetRef, PeiFund, Position};
+use crate::ledger::{Ledger, Movement};
 use crate::{AccountId, FundId, Label, Money};
 
 /// Valeur d'une position de PEA ou de portefeuille crypto.
@@ -44,24 +45,25 @@ pub struct AccountValuation {
     pub movements: Vec<Movement>,
 }
 
-/// Valorise un compte avec les cours disponibles et, pour un compte courant, les mouvements
-/// rattachés.
-pub fn value_account(
-    account: &Account,
-    prices: &PriceBook,
-    ledger: &CheckingLedger,
-) -> AccountValuation {
+/// Valorise un compte avec les cours disponibles et le grand livre : les comptes à solde (compte
+/// courant, livrets, assurance-vie, espèces d'un compte-titres) ajoutent à leur dernier solde
+/// saisi les mouvements postérieurs. L'épargne salariale reste valorisée par ses fonds.
+pub fn value_account(account: &Account, prices: &PriceBook, ledger: &Ledger) -> AccountValuation {
+    let movements = ledger.movements(account.id());
     match account.kind() {
-        AccountKind::Savings(details) => AccountValuation {
-            account_id: account.id(),
-            value: details.balance(),
-            provenance: Provenance::Manual,
-            positions: Vec::new(),
-            funds: Vec::new(),
-            movements: Vec::new(),
-        },
+        AccountKind::Savings(details) => {
+            let statement = details.reference().statement(movements);
+            AccountValuation {
+                account_id: account.id(),
+                value: statement.balance,
+                provenance: Provenance::Manual,
+                positions: Vec::new(),
+                funds: Vec::new(),
+                movements: statement.movements,
+            }
+        }
         AccountKind::Checking(details) => {
-            let statement = details.statement(ledger.movements(account.id()));
+            let statement = details.statement(movements);
             AccountValuation {
                 account_id: account.id(),
                 value: statement.balance,
@@ -77,13 +79,14 @@ pub fn value_account(
                 .iter()
                 .map(|position| value_position(position, prices))
                 .collect();
+            let cash = details.cash_reference().statement(movements);
             AccountValuation {
                 account_id: account.id(),
-                value: details.cash() + positions.iter().map(|p| p.value).sum::<Money>(),
+                value: cash.balance + positions.iter().map(|p| p.value).sum::<Money>(),
                 provenance: combined(positions.iter().map(|p| p.provenance)),
                 positions,
                 funds: Vec::new(),
-                movements: Vec::new(),
+                movements: cash.movements,
             }
         }
         AccountKind::EmployeeSavings(details) => {
@@ -106,7 +109,6 @@ pub fn value_account(
         }
     }
 }
-
 fn value_position(position: &Position, prices: &PriceBook) -> PositionValuation {
     let cost_basis = position.cost_basis();
     let (unit_price, provenance) = match (
@@ -201,10 +203,10 @@ mod tests {
     fn savings_account_is_valued_at_its_manual_balance() {
         let mut livret = open(AccountType::LivretA);
         livret
-            .update_savings_balance(Money::new(dec!(10640)), today())
+            .update_savings_balance(Money::new(dec!(10640)), today(), now())
             .unwrap();
 
-        let valuation = value_account(&livret, &PriceBook::default(), &CheckingLedger::default());
+        let valuation = value_account(&livret, &PriceBook::default(), &Ledger::default());
 
         assert_eq!(valuation.value, Money::new(dec!(10640)));
         assert_eq!(valuation.provenance, Provenance::Manual);
@@ -222,7 +224,7 @@ mod tests {
             .unwrap();
         let prices = PriceBook::new([live(btc, Money::new(dec!(60000)))]);
 
-        let valuation = value_account(&wallet, &prices, &CheckingLedger::default());
+        let valuation = value_account(&wallet, &prices, &Ledger::default());
         let position = &valuation.positions[0];
 
         assert_eq!(valuation.value, Money::new(dec!(9000)));
@@ -236,11 +238,11 @@ mod tests {
     fn falls_back_to_cost_basis_without_quote() {
         let cw8 = asset(QuoteSource::TwelveData, "CW8");
         let mut pea = open(AccountType::Pea);
-        pea.set_cash(Money::new(dec!(110))).unwrap();
+        pea.set_cash(Money::new(dec!(110)), today(), now()).unwrap();
         pea.upsert_position(Position::new(cw8, dec!(42), Some(Money::new(dec!(340)))).unwrap())
             .unwrap();
 
-        let valuation = value_account(&pea, &PriceBook::default(), &CheckingLedger::default());
+        let valuation = value_account(&pea, &PriceBook::default(), &Ledger::default());
 
         assert_eq!(valuation.value, Money::new(dec!(14390)));
         assert_eq!(valuation.provenance, Provenance::CostBasis);
@@ -256,7 +258,7 @@ mod tests {
             )
             .unwrap();
 
-        let valuation = value_account(&wallet, &PriceBook::default(), &CheckingLedger::default());
+        let valuation = value_account(&wallet, &PriceBook::default(), &Ledger::default());
 
         assert_eq!(valuation.value, Money::ZERO);
         assert_eq!(valuation.provenance, Provenance::Unavailable);
@@ -284,7 +286,7 @@ mod tests {
             ),
         ]);
 
-        let valuation = value_account(&wallet, &prices, &CheckingLedger::default());
+        let valuation = value_account(&wallet, &prices, &Ledger::default());
 
         assert_eq!(valuation.value, Money::new(dec!(11000)));
         assert_eq!(
@@ -323,7 +325,7 @@ mod tests {
         pei.upsert_fund(money_market).unwrap();
         let prices = PriceBook::new([live(iwda, Money::new(dec!(104)))]);
 
-        let valuation = value_account(&pei, &prices, &CheckingLedger::default());
+        let valuation = value_account(&pei, &prices, &Ledger::default());
 
         assert_eq!(valuation.funds[0].nav, Money::new(dec!(26)));
         assert_eq!(valuation.funds[0].value, Money::new(dec!(3120)));

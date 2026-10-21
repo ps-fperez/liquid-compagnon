@@ -1,4 +1,5 @@
-//! Format d'échange de la sauvegarde (version 2 : compte courant et rattachement des mouvements) et conversion depuis/vers le domaine.
+//! Format d'échange de la sauvegarde (version 3 : virements, comptes hors patrimoine,
+//! prélèvements des charges, livrets génériques ; version 2 : compte courant) et conversion depuis/vers le domaine.
 //!
 //! Les montants et taux sont sérialisés en chaînes décimales exactes, les dates en ISO 8601.
 //! La conversion vers le domaine repasse par les constructeurs du domaine : toutes les règles
@@ -13,11 +14,14 @@ use lc_domain::account::{
     SavingsProduct, ScenarioRates, SecuritiesDetails, SecuritiesProduct,
 };
 use lc_domain::budget::{
-    Category, Expense, OneOffIncome, Periodicity, RecurringCharge, SalaryEntry,
+    Category, Debit, Expense, OneOffIncome, Periodicity, RecurringCharge, SalaryEntry,
 };
+use lc_domain::ledger::BalanceReference;
+use lc_domain::transfer::{Endpoint, ExternalAccount, Schedule, Transfer};
 use lc_domain::{
-    AccountId, CategoryId, ChargeId, Color, Decimal, DomainError, ExpenseId, FundId, IncomeId,
-    Label, Money, Month, Rate, SalaryId, Snapshot, SnapshotId, SnapshotKind, SnapshotLine,
+    AccountId, CategoryId, ChargeId, Color, Decimal, DomainError, ExpenseId, ExternalId, FundId,
+    IncomeId, Label, Money, Month, Rate, SalaryId, Snapshot, SnapshotId, SnapshotKind,
+    SnapshotLine, TransferId,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -37,6 +41,11 @@ pub struct FullDataset {
     pub expenses: Vec<ExpenseRecord>,
     pub accounts: Vec<AccountRecord>,
     pub snapshots: Vec<SnapshotRecord>,
+    /// Absents avant la version 3.
+    #[serde(default)]
+    pub transfers: Vec<TransferRecord>,
+    #[serde(default)]
+    pub external_accounts: Vec<ExternalAccountRecord>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -84,6 +93,60 @@ pub struct ChargeRecord {
     pub periodicity: PeriodicityRecord,
     pub start: String,
     pub end: Option<String>,
+    /// Prélèvement sur un compte courant (absent avant la version 3).
+    #[serde(default)]
+    pub debit: Option<DebitRecord>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DebitRecord {
+    pub account_id: Uuid,
+    pub day: u8,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "id", rename_all = "snake_case")]
+pub enum EndpointRecord {
+    Account(Uuid),
+    External(Uuid),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ScheduleRecord {
+    Once {
+        date: NaiveDate,
+    },
+    Monthly {
+        day: u8,
+        /// `AAAA-MM`
+        from: String,
+        until: Option<String>,
+    },
+    Yearly {
+        month: u32,
+        day: u8,
+        from_year: i32,
+        until_year: Option<i32>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TransferRecord {
+    pub id: Uuid,
+    pub from: EndpointRecord,
+    pub to: EndpointRecord,
+    pub sent: Decimal,
+    pub received: Decimal,
+    pub label: Option<String>,
+    pub schedule: ScheduleRecord,
+    pub recorded_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalAccountRecord {
+    pub id: Uuid,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -146,6 +209,8 @@ pub struct FundRecord {
 pub enum SavingsProductRecord {
     LivretA,
     Ldds,
+    Livret,
+    AssuranceVie,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -162,13 +227,22 @@ pub enum AccountKindRecord {
         product: SavingsProductRecord,
         balance: Decimal,
         rate: Decimal,
-        deposit_ceiling: Decimal,
+        /// Absent pour un livret sans plafond (versions 3 et suivantes).
+        deposit_ceiling: Option<Decimal>,
         balance_updated_on: NaiveDate,
+        /// Instant du dernier solde saisi (absent avant la version 3 : fin de journée).
+        #[serde(default)]
+        reference_at: Option<DateTime<Utc>>,
     },
     Securities {
         product: SecuritiesProductRecord,
         cash: Decimal,
         positions: Vec<PositionRecord>,
+        /// Date et instant du dernier solde espèces (absents avant la version 3 : date d'export).
+        #[serde(default)]
+        cash_on: Option<NaiveDate>,
+        #[serde(default)]
+        cash_at: Option<DateTime<Utc>>,
     },
     EmployeeSavings {
         funds: Vec<FundRecord>,
@@ -265,6 +339,10 @@ impl FullDataset {
                     },
                     start: c.start().to_string(),
                     end: c.end().map(|m| m.to_string()),
+                    debit: c.debit().map(|d| DebitRecord {
+                        account_id: *d.account.as_uuid(),
+                        day: d.day,
+                    }),
                 })
                 .collect(),
             expenses: data
@@ -302,7 +380,54 @@ impl FullDataset {
                         .collect(),
                 })
                 .collect(),
+            transfers: data.transfers.iter().map(transfer_record).collect(),
+            external_accounts: data
+                .external_accounts
+                .iter()
+                .map(|a| ExternalAccountRecord {
+                    id: *a.id().as_uuid(),
+                    name: a.name().to_string(),
+                })
+                .collect(),
         }
+    }
+}
+
+fn endpoint_record(endpoint: Endpoint) -> EndpointRecord {
+    match endpoint {
+        Endpoint::Account(id) => EndpointRecord::Account(*id.as_uuid()),
+        Endpoint::External(id) => EndpointRecord::External(*id.as_uuid()),
+    }
+}
+
+fn transfer_record(t: &Transfer) -> TransferRecord {
+    TransferRecord {
+        id: *t.id().as_uuid(),
+        from: endpoint_record(t.from()),
+        to: endpoint_record(t.to()),
+        sent: t.sent().amount(),
+        received: t.received().amount(),
+        label: t.label().map(ToString::to_string),
+        schedule: match t.schedule() {
+            Schedule::Once { date } => ScheduleRecord::Once { date },
+            Schedule::Monthly { day, from, until } => ScheduleRecord::Monthly {
+                day,
+                from: from.to_string(),
+                until: until.map(|m| m.to_string()),
+            },
+            Schedule::Yearly {
+                month,
+                day,
+                from_year,
+                until_year,
+            } => ScheduleRecord::Yearly {
+                month,
+                day,
+                from_year,
+                until_year,
+            },
+        },
+        recorded_at: t.recorded_at(),
     }
 }
 
@@ -324,11 +449,14 @@ fn account_record(account: &Account) -> AccountRecord {
                 product: match d.product() {
                     SavingsProduct::LivretA => SavingsProductRecord::LivretA,
                     SavingsProduct::Ldds => SavingsProductRecord::Ldds,
+                    SavingsProduct::Livret => SavingsProductRecord::Livret,
+                    SavingsProduct::AssuranceVie => SavingsProductRecord::AssuranceVie,
                 },
                 balance: d.balance().amount(),
                 rate: d.rate().as_fraction(),
-                deposit_ceiling: d.deposit_ceiling().amount(),
+                deposit_ceiling: d.deposit_ceiling().map(|c| c.amount()),
                 balance_updated_on: d.balance_updated_on(),
+                reference_at: Some(d.reference().at),
             },
             AccountKind::Securities(d) => AccountKindRecord::Securities {
                 product: match d.product() {
@@ -336,6 +464,8 @@ fn account_record(account: &Account) -> AccountRecord {
                     SecuritiesProduct::Crypto => SecuritiesProductRecord::Crypto,
                 },
                 cash: d.cash().amount(),
+                cash_on: Some(d.cash_reference().on),
+                cash_at: Some(d.cash_reference().at),
                 positions: d
                     .positions()
                     .iter()
@@ -389,6 +519,7 @@ impl FullDataset {
     /// Convertit et valide l'ensemble des données. La première incohérence rencontrée est
     /// renvoyée avec son contexte ; rien n'est écrit tant que tout n'est pas valide.
     pub fn into_dataset(self) -> AppResult<Dataset> {
+        let exported_at = self.exported_at;
         let categories = self
             .categories
             .into_iter()
@@ -474,7 +605,7 @@ impl FullDataset {
         let accounts = self
             .accounts
             .into_iter()
-            .map(account_from_record)
+            .map(|r| account_from_record(r, exported_at))
             .collect::<Result<Vec<_>, DomainError>>()
             .map_err(context("compte"))?;
         let account_ids: HashSet<AccountId> = accounts.iter().map(Account::id).collect();
@@ -489,6 +620,45 @@ impl FullDataset {
             .chain(one_off_incomes.iter().filter_map(OneOffIncome::account));
         if linked.any(|id| !checking_ids.contains(&id)) {
             return Err(invalid("mouvement rattaché à un compte courant inconnu"));
+        }
+        if charges
+            .iter()
+            .filter_map(RecurringCharge::debit)
+            .any(|debit| !checking_ids.contains(&debit.account))
+        {
+            return Err(invalid("charge prélevée sur un compte courant inconnu"));
+        }
+
+        let external_accounts = self
+            .external_accounts
+            .into_iter()
+            .map(|r| {
+                Ok(ExternalAccount::new(
+                    ExternalId::from_uuid(r.id),
+                    Label::new(&r.name)?,
+                ))
+            })
+            .collect::<Result<Vec<_>, DomainError>>()
+            .map_err(context("compte hors patrimoine"))?;
+        let external_ids: HashSet<ExternalId> =
+            external_accounts.iter().map(ExternalAccount::id).collect();
+        let endpoint = |record: EndpointRecord| match record {
+            EndpointRecord::Account(id) => {
+                let id = AccountId::from_uuid(id);
+                account_ids.contains(&id).then_some(Endpoint::Account(id))
+            }
+            EndpointRecord::External(id) => {
+                let id = ExternalId::from_uuid(id);
+                external_ids.contains(&id).then_some(Endpoint::External(id))
+            }
+        };
+        let mut transfers = Vec::with_capacity(self.transfers.len());
+        for r in self.transfers {
+            let (Some(from), Some(to)) = (endpoint(r.from), endpoint(r.to)) else {
+                return Err(invalid("virement : compte inconnu"));
+            };
+            let transfer = transfer_from_record(r, from, to).map_err(context("virement"))?;
+            transfers.push(transfer);
         }
 
         let mut snapshots = Vec::with_capacity(self.snapshots.len());
@@ -526,6 +696,8 @@ impl FullDataset {
             expenses,
             accounts,
             snapshots,
+            transfers,
+            external_accounts,
         })
     }
 }
@@ -546,10 +718,61 @@ fn charge_from_record(
         },
         r.start.parse()?,
         r.end.as_deref().map(str::parse::<Month>).transpose()?,
+    )?
+    .with_debit(r.debit.map(|d| Debit {
+        account: AccountId::from_uuid(d.account_id),
+        day: d.day,
+    }))
+}
+
+fn transfer_from_record(
+    r: TransferRecord,
+    from: Endpoint,
+    to: Endpoint,
+) -> Result<Transfer, DomainError> {
+    let schedule = match r.schedule {
+        ScheduleRecord::Once { date } => Schedule::Once { date },
+        ScheduleRecord::Monthly { day, from, until } => Schedule::Monthly {
+            day,
+            from: from.parse()?,
+            until: until.as_deref().map(str::parse::<Month>).transpose()?,
+        },
+        ScheduleRecord::Yearly {
+            month,
+            day,
+            from_year,
+            until_year,
+        } => Schedule::Yearly {
+            month,
+            day,
+            from_year,
+            until_year,
+        },
+    };
+    Transfer::new(
+        TransferId::from_uuid(r.id),
+        from,
+        to,
+        Money::new(r.sent),
+        Money::new(r.received),
+        r.label.as_deref().map(Label::new).transpose()?,
+        schedule,
+        r.recorded_at,
     )
 }
 
-fn account_from_record(r: AccountRecord) -> Result<Account, DomainError> {
+/// Un ancien export (avant la version 3) n'a pas l'instant du dernier solde : on retient la fin
+/// de journée, pour que les virements de ce jour soient réputés déjà inclus.
+fn end_of_day(date: NaiveDate) -> DateTime<Utc> {
+    date.and_hms_opt(23, 59, 59)
+        .expect("heure valide")
+        .and_utc()
+}
+
+fn account_from_record(
+    r: AccountRecord,
+    exported_at: DateTime<Utc>,
+) -> Result<Account, DomainError> {
     let kind = match r.kind {
         AccountKindRecord::Savings {
             product,
@@ -557,26 +780,38 @@ fn account_from_record(r: AccountRecord) -> Result<Account, DomainError> {
             rate,
             deposit_ceiling,
             balance_updated_on,
+            reference_at,
         } => AccountKind::Savings(SavingsDetails::new(
             match product {
                 SavingsProductRecord::LivretA => SavingsProduct::LivretA,
                 SavingsProductRecord::Ldds => SavingsProduct::Ldds,
+                SavingsProductRecord::Livret => SavingsProduct::Livret,
+                SavingsProductRecord::AssuranceVie => SavingsProduct::AssuranceVie,
             },
-            Money::new(balance),
+            BalanceReference::new(
+                Money::new(balance),
+                balance_updated_on,
+                reference_at.unwrap_or_else(|| end_of_day(balance_updated_on)),
+            ),
             Rate::from_fraction(rate)?,
-            Money::new(deposit_ceiling),
-            balance_updated_on,
+            deposit_ceiling.map(Money::new),
         )?),
         AccountKindRecord::Securities {
             product,
             cash,
             positions,
+            cash_on,
+            cash_at,
         } => AccountKind::Securities(SecuritiesDetails::new(
             match product {
                 SecuritiesProductRecord::Pea => SecuritiesProduct::Pea,
                 SecuritiesProductRecord::Crypto => SecuritiesProduct::Crypto,
             },
-            Money::new(cash),
+            BalanceReference::new(
+                Money::new(cash),
+                cash_on.unwrap_or_else(|| exported_at.date_naive()),
+                cash_at.unwrap_or(exported_at),
+            ),
             positions
                 .into_iter()
                 .map(|p| {

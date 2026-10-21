@@ -85,6 +85,34 @@ async function click(label) {
   await sleep(200);
 }
 
+/** Clique, dans le groupe intitulé `group` (« De », « Vers »…), le bouton libellé `label`. */
+async function clickIn(group, label) {
+  const ok = await evaluate(`(() => {
+    const scope = document.querySelector('[role="dialog"]') ?? document;
+    const title = [...scope.querySelectorAll("span")].find(s => s.textContent.trim() === ${JSON.stringify(group)});
+    const el = title && [...title.parentElement.querySelectorAll("button")].find(b => b.textContent.trim() === ${JSON.stringify(label)});
+    if (!el) return false;
+    el.click();
+    return true;
+  })()`);
+  if (!ok) await fail(`« ${label} » introuvable dans « ${group} »`);
+  await sleep(200);
+}
+
+/** Coche la case de la feuille ouverte dont le libellé contient `text`. */
+async function check(text) {
+  const ok = await evaluate(`(() => {
+    const label = [...document.querySelectorAll('[role="dialog"] label')].find(l => l.textContent.includes(${JSON.stringify(text)}));
+    const box = label?.querySelector('input[type="checkbox"]');
+    if (!box) return false;
+    box.checked = true;
+    box.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  })()`);
+  if (!ok) await fail(`case introuvable : « ${text} »`);
+  await sleep(200);
+}
+
 /** Remplit le champ dont le libellé vaut `label` (déclenche l'événement input). */
 async function fill(label, value) {
   const ok = await evaluate(`(() => {
@@ -157,7 +185,6 @@ console.log("3. Création d'un Livret A");
 await click("Comptes");
 await click("Nouveau");
 await waitForText("Nouveau compte");
-await fill("Versement mensuel programmé (facultatif)", "200");
 await shot("creation-compte");
 await click("Créer le compte");
 await waitForText("Mettre à jour le solde");
@@ -358,6 +385,88 @@ await click("Accueil");
 await waitForText("12 054,85 €"); // 12 140,25 − 85,40
 await shot("compte-courant-decouvert");
 
+console.log("13. Mois type : autre livret, virements, compte hors patrimoine, abondement, prélèvement");
+await click("Comptes");
+await click("Nouveau");
+await click("Autre livret");
+await fill("Nom", "Livret jeune");
+await click("Créer le compte");
+await waitForText("Taux et plafond");
+await waitForText("Plafond de versement");
+await waitForText("Aucun mouvement depuis");
+// Virement ponctuel depuis la saisie rapide : le compte courant est proposé au départ.
+await click("Saisie rapide");
+await click("Virement");
+await waitForText("Nouveau virement");
+await clickIn("Vers", "Livret A");
+await click("Ponctuel");
+await fill("Montant envoyé", "300");
+await waitForText("10 940,25 €"); // aperçu : 10 640,25 + 300
+await shot("virement-apercu");
+await click("Enregistrer le virement");
+await waitForText("Virement enregistré");
+await waitForText("10 940,25 €");
+// Virement mensuel vers un compte hors patrimoine créé depuis la feuille.
+await click("Saisie rapide");
+await click("Virement");
+await clickIn("Vers", "+ Hors patrimoine");
+await fill("Nom du compte hors patrimoine", "Compte joint");
+await click("Ajouter");
+await waitForText("Compte hors patrimoine ajouté");
+await fill("Montant envoyé", "1560");
+await click("Enregistrer le virement");
+await waitForText("Virement programmé");
+await waitForText("Compte joint"); // section « Hors patrimoine »
+await waitForText("utilisé");
+// Rapatriement ponctuel d'un livret vers le compte courant.
+await click("Saisie rapide");
+await click("Virement");
+await clickIn("De", "Livret A");
+await clickIn("Vers", "Compte courant");
+await click("Ponctuel");
+await fill("Montant envoyé", "100");
+await click("Enregistrer le virement");
+await waitForText("Virement enregistré");
+await waitForText("10 840,25 €");
+if (!(await openChecking())) await fail("compte courant introuvable dans la liste");
+await waitForText("Virement reçu");
+await waitForText("−285,40 €"); // −85,40 − 300 + 100 (le mensuel du jour est inclus dans la référence)
+await waitForText("Chaque mois, le");
+await shot("compte-courant-virements");
+// Épargne salariale : versement annuel avec abondement net de prélèvements sociaux.
+await click("Comptes");
+await click("Nouveau");
+await click("Épargne salariale");
+await click("Créer le compte");
+await waitForText("Nouveau virement");
+await click("Nouveau virement");
+await clickIn("De", "Compte courant");
+await click("Annuel");
+await fill("Montant envoyé", "500");
+await check("Montant reçu différent");
+await fill("Montant reçu", "1493,30");
+await waitForText("Abondement net : +993,30 €");
+await shot("virement-abondement");
+await click("Enregistrer le virement");
+await waitForText("Virement programmé");
+await waitForText("Chaque année, le");
+await waitForText("envoyé 500,00 € · reçu 1 493,30 €");
+// Budget : virement vers l'extérieur et charge prélevée sur le compte courant.
+await click("Budget");
+await waitForText("Virements hors patrimoine");
+await waitForText("1 560,00 €");
+await click("Ajouter une charge fixe");
+await fill("Libellé", "Box internet");
+await fill("Montant", "30");
+await click("Logement");
+await waitForText("Jour du prélèvement");
+await fill("Jour du prélèvement", "5");
+await click("Enregistrer");
+await waitForText("prélevée le 5");
+await shot("budget-virements");
+// Virements entre comptes suivis : le patrimoine total ne bouge pas.
+await click("Accueil");
+await waitForText("12 054,85 €");
 ws.close();
 if (errors.length > 0) {
   console.error(`ÉCHEC : ${errors.length} erreur(s) dans la WebView`);

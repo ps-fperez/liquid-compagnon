@@ -37,11 +37,13 @@ pub fn ldds_ceiling() -> Money {
     Money::new(dec!(12000))
 }
 
-/// Taux et plafond par défaut d'un livret réglementé.
-pub fn savings_terms(product: SavingsProduct) -> (Rate, Money) {
+/// Taux et plafond par défaut : réglementés pour le Livret A et le LDDS ; libres (0 %, sans
+/// plafond) pour un autre livret ou une assurance-vie.
+pub fn savings_terms(product: SavingsProduct) -> (Rate, Option<Money>) {
     match product {
-        SavingsProduct::LivretA => (livret_a_rate(), livret_a_ceiling()),
-        SavingsProduct::Ldds => (ldds_rate(), ldds_ceiling()),
+        SavingsProduct::LivretA => (livret_a_rate(), Some(livret_a_ceiling())),
+        SavingsProduct::Ldds => (ldds_rate(), Some(ldds_ceiling())),
+        SavingsProduct::Livret | SavingsProduct::AssuranceVie => (Rate::ZERO, None),
     }
 }
 
@@ -63,6 +65,12 @@ pub fn scenario_rates(account_type: AccountType, savings_rate: Option<Rate>) -> 
         },
         // Pas de rendement : le compte courant reste à son solde dans la projection.
         AccountType::Checking => ScenarioRates::uniform(Rate::ZERO),
+        AccountType::Livret => ScenarioRates::uniform(savings_rate.unwrap_or(Rate::ZERO)),
+        AccountType::AssuranceVie => ScenarioRates {
+            pessimistic: percent(dec!(1.5)),
+            neutral: percent(dec!(2.5)),
+            optimistic: percent(dec!(4)),
+        },
     }
 }
 
@@ -75,6 +83,8 @@ pub fn color(account_type: AccountType) -> Color {
         AccountType::Pei => "#60A5FA",
         AccountType::Crypto => "#7C3AED",
         AccountType::Checking => "#22D3EE",
+        AccountType::Livret => "#E879F9",
+        AccountType::AssuranceVie => "#38BDF8",
     };
     Color::new(hex).expect("les couleurs par défaut sont valides")
 }

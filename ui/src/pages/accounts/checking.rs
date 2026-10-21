@@ -1,10 +1,11 @@
-use lc_shared_dto::{CheckingMovementDto, Decimal, MovementKindDto, NaiveDate};
+use lc_shared_dto::{Decimal, MovementDto, NaiveDate};
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
 
 use super::savings::BalanceSheet;
-use crate::components::style::{BTN_PRIMARY, SECTION_TITLE};
-use crate::components::{Amount, Card, EmptyState};
+use super::transfers::MovementFeed;
+use crate::components::style::BTN_PRIMARY;
+use crate::components::{Amount, Card};
 use crate::format;
 
 /// Fiche d'un compte courant : solde courant, dernier solde saisi et mouvements comptés depuis.
@@ -14,7 +15,7 @@ pub fn CheckingDetails(
     balance: Decimal,
     reference_balance: Decimal,
     reference_on: NaiveDate,
-    movements: Vec<CheckingMovementDto>,
+    movements: Vec<MovementDto>,
     on_saved: Callback<()>,
 ) -> impl IntoView {
     let balance_open = RwSignal::new(false);
@@ -24,7 +25,6 @@ pub fn CheckingDetails(
         let target = format!("/budget?saisie=depense&n={}", js_sys::Date::now() as u64);
         navigate.with_value(|navigate| navigate(&target, Default::default()));
     });
-    let has_movements = !movements.is_empty();
 
     view! {
         <Card class="flex flex-col gap-3">
@@ -46,45 +46,16 @@ pub fn CheckingDetails(
                 </span>
             </div>
             <p class="text-xs text-muted">
-                "Les dépenses et revenus ponctuels rattachés à ce compte, saisis depuis, sont déduits ou ajoutés. Recalez le solde quand vous consultez votre banque."
+                "Les dépenses, revenus ponctuels, charges prélevées et virements comptés depuis sont déduits ou ajoutés. Recalez le solde quand vous consultez votre banque."
             </p>
         </Card>
 
-        <section class="flex flex-col gap-2">
-            <h2 class=SECTION_TITLE>"Depuis le dernier solde saisi"</h2>
-            {if has_movements {
-                view! {
-                    <Card class="flex flex-col p-2">
-                        {movements.into_iter().map(|movement| {
-                            let fallback = match movement.kind {
-                                MovementKindDto::Expense => "Dépense",
-                                MovementKindDto::Income => "Revenu ponctuel",
-                            };
-                            view! {
-                                <div class="flex min-h-12 items-center justify-between gap-3 px-2">
-                                    <span class="flex min-w-0 flex-col">
-                                        <span class="truncate text-sm">{movement.label.unwrap_or_else(|| fallback.to_string())}</span>
-                                        <span class="text-xs text-muted">{format::date(movement.date)}</span>
-                                    </span>
-                                    <Amount value=movement.amount signed=true colored=true />
-                                </div>
-                            }
-                        }).collect_view()}
-                    </Card>
-                }
-                .into_any()
-            } else {
-                view! {
-                    <EmptyState
-                        title="Aucun mouvement depuis"
-                        body="Vos dépenses rattachées à ce compte apparaîtront ici et feront évoluer le solde."
-                        action="Ajouter une dépense"
-                        on_action=add_expense
-                    />
-                }
-                .into_any()
-            }}
-        </section>
+        <MovementFeed
+            movements=movements
+            empty_body="Dépenses, charges prélevées et virements rattachés à ce compte apparaîtront ici et feront évoluer le solde."
+            empty_action="Ajouter une dépense"
+            on_empty_action=add_expense
+        />
 
         <button class=BTN_PRIMARY on:click=move |_| balance_open.set(true)>"Mettre à jour le solde"</button>
         <BalanceSheet open=balance_open account_id=account_id current=balance allow_negative=true on_saved=on_saved />

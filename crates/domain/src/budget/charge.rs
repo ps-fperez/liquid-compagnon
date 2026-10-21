@@ -1,4 +1,14 @@
-use crate::{CategoryId, ChargeId, DomainError, Label, Money, Month};
+use chrono::NaiveDate;
+
+use crate::{AccountId, CategoryId, ChargeId, DomainError, Label, Money, Month};
+
+/// Prélèvement d'une charge sur un compte courant, à un jour du mois (ramené au dernier jour si
+/// le mois est plus court).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Debit {
+    pub account: AccountId,
+    pub day: u8,
+}
 
 /// Fréquence de paiement d'une charge fixe.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -29,6 +39,7 @@ pub struct RecurringCharge {
     periodicity: Periodicity,
     start: Month,
     end: Option<Month>,
+    debit: Option<Debit>,
 }
 
 impl RecurringCharge {
@@ -52,7 +63,43 @@ impl RecurringCharge {
             periodicity,
             start,
             end,
+            debit: None,
         })
+    }
+
+    /// Prélève la charge sur un compte courant (ou sur aucun compte).
+    pub fn with_debit(mut self, debit: Option<Debit>) -> Result<Self, DomainError> {
+        if debit.is_some_and(|d| !(1..=31).contains(&d.day)) {
+            return Err(DomainError::InvalidDayOfMonth);
+        }
+        self.debit = debit;
+        Ok(self)
+    }
+
+    pub fn debit(&self) -> Option<Debit> {
+        self.debit
+    }
+
+    /// Dates de prélèvement jusqu'à `today` inclus : chaque échéance de la périodicité depuis le
+    /// mois de début (tous les 1, 3 ou 12 mois).
+    pub fn due_dates_until(&self, today: NaiveDate) -> Vec<NaiveDate> {
+        let Some(debit) = self.debit else {
+            return Vec::new();
+        };
+        let last = self
+            .end
+            .map_or(Month::of(today), |end| end.min(Month::of(today)));
+        let step = self.periodicity.months() as i32;
+        let mut dates = Vec::new();
+        let mut month = self.start;
+        while month <= last {
+            let date = month.day(debit.day);
+            if date <= today {
+                dates.push(date);
+            }
+            month = month.plus_months(step);
+        }
+        dates
     }
 
     pub fn id(&self) -> ChargeId {

@@ -10,6 +10,7 @@ mod quick_balance;
 mod savings;
 mod securities;
 mod settings;
+mod transfers;
 
 pub use detail::AccountDetailPage;
 pub use list::AccountsPage;

@@ -11,26 +11,45 @@ pub enum AccountTypeDto {
     Pei,
     Crypto,
     Checking,
+    Livret,
+    AssuranceVie,
 }
 
 impl AccountTypeDto {
-    pub const ALL: [AccountTypeDto; 6] = [
+    /// Dans l'ordre des familles proposées à la création (voir `family`).
+    pub const ALL: [AccountTypeDto; 8] = [
         AccountTypeDto::Checking,
         AccountTypeDto::LivretA,
         AccountTypeDto::Ldds,
+        AccountTypeDto::Livret,
         AccountTypeDto::Pea,
-        AccountTypeDto::Pei,
+        AccountTypeDto::AssuranceVie,
         AccountTypeDto::Crypto,
+        AccountTypeDto::Pei,
     ];
+
+    /// Famille affichée à la création d'un compte.
+    pub const fn family(&self) -> &'static str {
+        match self {
+            AccountTypeDto::Checking => "Courant",
+            AccountTypeDto::LivretA | AccountTypeDto::Ldds | AccountTypeDto::Livret => "Livrets",
+            AccountTypeDto::Pea | AccountTypeDto::AssuranceVie | AccountTypeDto::Crypto => {
+                "Placements"
+            }
+            AccountTypeDto::Pei => "Épargne salariale",
+        }
+    }
 
     pub const fn label(&self) -> &'static str {
         match self {
             AccountTypeDto::LivretA => "Livret A",
             AccountTypeDto::Ldds => "LDDS",
             AccountTypeDto::Pea => "PEA",
-            AccountTypeDto::Pei => "PEI",
+            AccountTypeDto::Pei => "Épargne salariale",
             AccountTypeDto::Crypto => "Portefeuille crypto",
             AccountTypeDto::Checking => "Compte courant",
+            AccountTypeDto::Livret => "Autre livret",
+            AccountTypeDto::AssuranceVie => "Assurance-vie ou PER",
         }
     }
 }

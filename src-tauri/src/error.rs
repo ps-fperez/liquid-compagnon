@@ -27,7 +27,10 @@ pub fn app_error(error: AppError) -> ErrorDto {
         | AppError::PinNotSet
         | AppError::CategoryArchived
         | AppError::DuplicateCategory
-        | AppError::CategoryInUse => ErrorDto::new(ErrorCode::Invalid, message),
+        | AppError::CategoryInUse
+        | AppError::InvalidTransferEndpoint
+        | AppError::DuplicateExternalAccount
+        | AppError::ExternalAccountInUse => ErrorDto::new(ErrorCode::Invalid, message),
         AppError::Pricing(_) | AppError::NoPriceProvider => {
             ErrorDto::new(ErrorCode::Pricing, message)
         }

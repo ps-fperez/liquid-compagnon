@@ -48,6 +48,10 @@ define_id!(
     SalaryId,
     /// Identifiant d'un snapshot de patrimoine.
     SnapshotId,
+    /// Identifiant d'un virement (ponctuel ou récurrent).
+    TransferId,
+    /// Identifiant d'un compte hors patrimoine (compte joint, banque d'un crédit…).
+    ExternalId,
 );
 
 #[cfg(test)]

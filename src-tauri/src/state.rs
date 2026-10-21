@@ -11,12 +11,13 @@ use lc_application::ports::{Clock, PriceProvider};
 use lc_application::pricing::PricingService;
 use lc_application::projection::ProjectionUseCases;
 use lc_application::security::SecurityUseCases;
+use lc_application::transfers::TransferUseCases;
 use lc_application::updates::UpdateService;
 use lc_infrastructure::{
     Argon2PinHasher, CoinGeckoProvider, Database, GithubReleaseFeed, HttpPackageDownloader,
     JsonBackupCodec, SqliteAccountRepository, SqliteBudgetRepository, SqliteDatasetStore,
-    SqlitePriceCache, SqliteSettingsStore, SqliteSnapshotRepository, SystemClock,
-    TwelveDataProvider, YahooFinanceProvider, download_client, http_client,
+    SqlitePriceCache, SqliteSettingsStore, SqliteSnapshotRepository, SqliteTransferRepository,
+    SystemClock, TwelveDataProvider, YahooFinanceProvider, download_client, http_client,
 };
 
 use crate::session::Session;
@@ -29,6 +30,7 @@ pub struct Services {
     pub session: Session,
     pub security: SecurityUseCases,
     pub budget: BudgetUseCases,
+    pub transfers: TransferUseCases,
     pub accounts: AccountUseCases,
     pub dashboard: DashboardUseCases,
     pub projection: ProjectionUseCases,
@@ -46,6 +48,7 @@ impl Services {
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
         let accounts = Arc::new(SqliteAccountRepository::new(db.clone()));
         let budget = Arc::new(SqliteBudgetRepository::new(db.clone()));
+        let transfers = Arc::new(SqliteTransferRepository::new(db.clone()));
         let snapshots = Arc::new(SqliteSnapshotRepository::new(db.clone()));
         let settings = Arc::new(SqliteSettingsStore::new(db.clone()));
         let http = http_client()?;
@@ -82,16 +85,24 @@ impl Services {
                 Arc::new(Argon2PinHasher),
                 clock.clone(),
             ),
-            budget: BudgetUseCases::new(budget.clone(), accounts.clone(), clock.clone()),
+            budget: BudgetUseCases::new(
+                budget.clone(),
+                accounts.clone(),
+                transfers.clone(),
+                clock.clone(),
+            ),
+            transfers: TransferUseCases::new(transfers.clone(), accounts.clone(), clock.clone()),
             accounts: AccountUseCases::new(
                 accounts.clone(),
                 budget.clone(),
+                transfers.clone(),
                 pricing.clone(),
                 clock.clone(),
             ),
             dashboard: DashboardUseCases::new(
                 accounts.clone(),
                 budget.clone(),
+                transfers.clone(),
                 snapshots.clone(),
                 pricing.clone(),
                 clock.clone(),
@@ -99,12 +110,14 @@ impl Services {
             projection: ProjectionUseCases::new(
                 accounts.clone(),
                 budget.clone(),
+                transfers.clone(),
                 pricing,
                 clock.clone(),
             ),
             backup: BackupUseCases::new(
                 accounts,
                 budget,
+                transfers,
                 snapshots,
                 settings,
                 Arc::new(SqliteDatasetStore::new(db)),
@@ -115,6 +128,10 @@ impl Services {
         services
             .budget
             .ensure_default_categories()
+            .map_err(|error| error.to_string())?;
+        services
+            .transfers
+            .convert_scheduled_contributions()
             .map_err(|error| error.to_string())?;
         Ok(services)
     }

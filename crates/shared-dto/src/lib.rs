@@ -11,6 +11,7 @@ mod dashboard;
 mod error;
 mod projection;
 mod session;
+mod transfers;
 mod updates;
 
 pub use accounts::*;
@@ -20,6 +21,7 @@ pub use dashboard::*;
 pub use error::*;
 pub use projection::*;
 pub use session::*;
+pub use transfers::*;
 pub use updates::*;
 
 pub use chrono::{DateTime, NaiveDate, Utc};

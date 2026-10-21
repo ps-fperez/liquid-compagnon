@@ -1,4 +1,6 @@
-use lc_shared_dto::{AccountDetailsDto, AccountDto, AccountTypeDto, ErrorDto, IdInput};
+use lc_shared_dto::{
+    AccountDetailsDto, AccountDto, AccountTypeDto, ErrorDto, IdInput, MovementDto,
+};
 use leptos::prelude::*;
 use leptos_router::components::A;
 use leptos_router::hooks::use_params_map;
@@ -8,9 +10,10 @@ use super::pei::PeiDetails;
 use super::savings::SavingsDetails;
 use super::securities::SecuritiesDetails;
 use super::settings::{AccountSettingsSheet, ArchiveControl};
+use super::transfers::{MovementFeed, ScheduledTransfers};
 use crate::api;
-use crate::components::style::{BTN_SECONDARY, SECTION_TITLE};
-use crate::components::{Amount, Card, ErrorBanner, ProvenanceBadge, Skeleton};
+use crate::components::style::BTN_SECONDARY;
+use crate::components::{Amount, ErrorBanner, ProvenanceBadge, Skeleton};
 use crate::icons::{Icon, IconName};
 use crate::util::load;
 
@@ -44,55 +47,86 @@ pub fn AccountDetailPage() -> impl IntoView {
 #[component]
 fn AccountView(account: AccountDto, on_saved: Callback<()>) -> impl IntoView {
     let settings_open = RwSignal::new(false);
-    let details = match account.details.clone() {
+    let new_transfer = RwSignal::new(false);
+    let open_transfer = Callback::new(move |_: ()| new_transfer.set(true));
+    let transfer_feed = move |movements: Vec<MovementDto>| {
+        view! {
+            <MovementFeed
+                movements=movements
+                empty_body="Les virements reçus ou émis depuis le dernier solde saisi apparaîtront ici et feront évoluer le solde."
+                empty_action="Nouveau virement"
+                on_empty_action=open_transfer
+            />
+        }
+    };
+    let (details, feed) = match account.details.clone() {
         AccountDetailsDto::Savings {
             balance,
+            reference_balance,
             rate_percent,
             deposit_ceiling,
             balance_updated_on,
             ceiling_reached,
-        } => view! {
-            <SavingsDetails
-                account_id=account.id.clone()
-                balance=balance
-                rate_percent=rate_percent
-                deposit_ceiling=deposit_ceiling
-                balance_updated_on=balance_updated_on
-                ceiling_reached=ceiling_reached
-                on_saved=on_saved
-            />
-        }
-        .into_any(),
-        AccountDetailsDto::Securities { cash, positions } => view! {
-            <SecuritiesDetails
-                account_id=account.id.clone()
-                account_type=account.account_type
-                cash=cash
-                positions=positions
-                on_saved=on_saved
-            />
-        }
-        .into_any(),
+            movements,
+        } => (
+            view! {
+                <SavingsDetails
+                    account_id=account.id.clone()
+                    balance=balance
+                    reference_balance=reference_balance
+                    rate_percent=rate_percent
+                    deposit_ceiling=deposit_ceiling
+                    balance_updated_on=balance_updated_on
+                    ceiling_reached=ceiling_reached
+                    on_saved=on_saved
+                />
+            }
+            .into_any(),
+            Some(transfer_feed(movements).into_any()),
+        ),
+        AccountDetailsDto::Securities {
+            cash,
+            positions,
+            movements,
+        } => (
+            view! {
+                <SecuritiesDetails
+                    account_id=account.id.clone()
+                    account_type=account.account_type
+                    cash=cash
+                    positions=positions
+                    on_saved=on_saved
+                />
+            }
+            .into_any(),
+            (!movements.is_empty()).then(|| transfer_feed(movements).into_any()),
+        ),
         AccountDetailsDto::Checking {
             balance,
             reference_balance,
             reference_on,
             movements,
-        } => view! {
-            <CheckingDetails
-                account_id=account.id.clone()
-                balance=balance
-                reference_balance=reference_balance
-                reference_on=reference_on
-                movements=movements
-                on_saved=on_saved
-            />
-        }
-        .into_any(),
-        AccountDetailsDto::EmployeeSavings { funds } => view! {
-            <PeiDetails account_id=account.id.clone() funds=funds on_saved=on_saved />
-        }
-        .into_any(),
+        } => (
+            view! {
+                <CheckingDetails
+                    account_id=account.id.clone()
+                    balance=balance
+                    reference_balance=reference_balance
+                    reference_on=reference_on
+                    movements=movements
+                    on_saved=on_saved
+                />
+            }
+            .into_any(),
+            None,
+        ),
+        AccountDetailsDto::EmployeeSavings { funds } => (
+            view! {
+                <PeiDetails account_id=account.id.clone() funds=funds on_saved=on_saved />
+            }
+            .into_any(),
+            None,
+        ),
     };
 
     view! {
@@ -110,17 +144,13 @@ fn AccountView(account: AccountDto, on_saved: Callback<()>) -> impl IntoView {
         </header>
 
         {details}
-
-        // Le compte courant reste à son solde dans la projection : pas de versement programmé.
-        {(account.account_type != AccountTypeDto::Checking).then(|| view! {
-            <section class="flex flex-col gap-2">
-                <h2 class=SECTION_TITLE>"Projection"</h2>
-                <Card class="flex items-center justify-between">
-                    <span class="text-sm text-muted">"Versement mensuel programmé"</span>
-                    <Amount value=account.monthly_contribution />
-                </Card>
-            </section>
-        })}
+        {feed}
+        <ScheduledTransfers
+            account_id=account.id.clone()
+            incoming=account.account_type != AccountTypeDto::Checking
+            new_open=new_transfer
+            on_saved=on_saved
+        />
 
         <div class="flex flex-col gap-2">
             <button class=BTN_SECONDARY on:click=move |_| settings_open.set(true)>"Paramètres du compte"</button>

@@ -5,8 +5,12 @@ use async_trait::async_trait;
 use chrono::{DateTime, NaiveDate, Utc};
 use lc_domain::account::{Account, AssetRef, QuoteSource};
 use lc_domain::budget::{Category, Expense, OneOffIncome, RecurringCharge, SalaryEntry};
+use lc_domain::transfer::{ExternalAccount, Transfer};
 use lc_domain::valuation::Quote;
-use lc_domain::{AccountId, CategoryId, ChargeId, ExpenseId, IncomeId, SalaryId, Snapshot};
+use lc_domain::{
+    AccountId, CategoryId, ChargeId, ExpenseId, ExternalId, IncomeId, SalaryId, Snapshot,
+    TransferId,
+};
 
 use crate::backup::FullDataset;
 
@@ -54,6 +58,18 @@ pub trait BudgetRepository: Send + Sync {
     fn expenses(&self) -> StorageResult<Vec<Expense>>;
     fn save_expense(&self, expense: &Expense) -> StorageResult<()>;
     fn delete_expense(&self, id: ExpenseId) -> StorageResult<bool>;
+}
+
+/// Virements et comptes hors patrimoine. Les suppressions renvoient `false` si l'élément
+/// n'existait pas.
+pub trait TransferRepository: Send + Sync {
+    fn transfers(&self) -> StorageResult<Vec<Transfer>>;
+    fn save_transfer(&self, transfer: &Transfer) -> StorageResult<()>;
+    fn delete_transfer(&self, id: TransferId) -> StorageResult<bool>;
+
+    fn external_accounts(&self) -> StorageResult<Vec<ExternalAccount>>;
+    fn save_external_account(&self, account: &ExternalAccount) -> StorageResult<()>;
+    fn delete_external_account(&self, id: ExternalId) -> StorageResult<bool>;
 }
 
 pub trait SnapshotRepository: Send + Sync {
@@ -156,6 +172,8 @@ pub struct Dataset {
     pub expenses: Vec<Expense>,
     pub accounts: Vec<Account>,
     pub snapshots: Vec<Snapshot>,
+    pub transfers: Vec<Transfer>,
+    pub external_accounts: Vec<ExternalAccount>,
 }
 
 /// Remplacement de toutes les données en une transaction (import).

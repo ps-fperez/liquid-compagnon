@@ -7,6 +7,7 @@ use leptos_router::hooks::use_query_map;
 
 use super::create::CreateAccountSheet;
 use super::quick_balance::QuickBalanceSheet;
+use super::transfers::{ExternalAccounts, TransferSheet};
 use crate::api;
 use crate::components::style::BTN_PRIMARY;
 use crate::components::{Amount, Card, EmptyState, ErrorBanner, ProvenanceBadge, Skeleton};
@@ -19,12 +20,16 @@ pub fn AccountsPage() -> impl IntoView {
     let query = use_query_map();
     let create_open = RwSignal::new(false);
     let balance_open = RwSignal::new(false);
+    let transfer_open = RwSignal::new(false);
+    let transfers_saved = RwSignal::new(0_u32);
     Effect::new(move |_| {
         if query.with(|q| q.get("nouveau").is_some()) {
             create_open.set(true);
         }
-        if query.with(|q| q.get("saisie").as_deref() == Some("solde")) {
-            balance_open.set(true);
+        match query.with(|q| q.get("saisie")).as_deref() {
+            Some("solde") => balance_open.set(true),
+            Some("virement") => transfer_open.set(true),
+            _ => {}
         }
     });
     let include_archived = RwSignal::new(false);
@@ -55,7 +60,7 @@ pub fn AccountsPage() -> impl IntoView {
             Some(Ok(list)) if list.accounts.is_empty() => view! {
                 <EmptyState
                     title="Ajoutez votre premier compte"
-                    body="Compte courant, Livret A, LDDS, PEA, PEI ou portefeuille crypto."
+                    body="Compte courant, livret, PEA, assurance-vie, épargne salariale ou portefeuille crypto."
                     action="Ajouter un compte"
                     on_action=Callback::new(move |_| create_open.set(true))
                 />
@@ -93,7 +98,12 @@ pub fn AccountsPage() -> impl IntoView {
             "Afficher les comptes clôturés"
         </label>
 
+        <ExternalAccounts refresh=transfers_saved />
         <CreateAccountSheet open=create_open />
+        <TransferSheet open=transfer_open on_saved=Callback::new(move |_| {
+            reload();
+            transfers_saved.update(|n| *n += 1);
+        }) />
     }
 }
 

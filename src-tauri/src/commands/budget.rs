@@ -3,6 +3,7 @@
 use lc_application::budget::{
     ChargeInput as UseCaseChargeInput, ExpenseInput as UseCaseExpenseInput,
 };
+use lc_domain::budget::Debit;
 use lc_domain::{AccountId, CategoryId, ChargeId, ExpenseId, IncomeId, Money, SalaryId};
 use lc_shared_dto::*;
 
@@ -218,6 +219,13 @@ pub async fn upsert_charge(state: AppState<'_>, input: ChargeInput) -> CommandRe
             periodicity: mapping::periodicity(input.periodicity),
             start: month(&input.start)?,
             end: input.end.as_deref().map(month).transpose()?,
+            debit: match (input.debit_account_id.as_deref(), input.debit_day) {
+                (Some(account), Some(day)) => Some(Debit {
+                    account: id(account, AccountId::from_uuid)?,
+                    day,
+                }),
+                _ => None,
+            },
         };
         let charge_id = services
             .budget

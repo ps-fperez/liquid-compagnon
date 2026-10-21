@@ -16,7 +16,7 @@ use lc_domain::{Money, Month};
 use lc_infrastructure::{
     Argon2PinHasher, Database, JsonBackupCodec, SqliteAccountRepository, SqliteBudgetRepository,
     SqliteDatasetStore, SqlitePriceCache, SqliteSettingsStore, SqliteSnapshotRepository,
-    SystemClock,
+    SqliteTransferRepository, SystemClock,
 };
 use rust_decimal_macros::dec;
 
@@ -25,6 +25,7 @@ struct App {
     path: PathBuf,
     accounts: Arc<SqliteAccountRepository>,
     budget: Arc<SqliteBudgetRepository>,
+    transfers: Arc<SqliteTransferRepository>,
     snapshots: Arc<SqliteSnapshotRepository>,
     settings: Arc<SqliteSettingsStore>,
     dataset: Arc<SqliteDatasetStore>,
@@ -41,6 +42,7 @@ impl App {
             path,
             accounts: Arc::new(SqliteAccountRepository::new(db.clone())),
             budget: Arc::new(SqliteBudgetRepository::new(db.clone())),
+            transfers: Arc::new(SqliteTransferRepository::new(db.clone())),
             snapshots: Arc::new(SqliteSnapshotRepository::new(db.clone())),
             settings: Arc::new(SqliteSettingsStore::new(db.clone())),
             dataset: Arc::new(SqliteDatasetStore::new(db.clone())),
@@ -65,6 +67,7 @@ impl App {
         BudgetUseCases::new(
             self.budget.clone(),
             self.accounts.clone(),
+            self.transfers.clone(),
             self.clock.clone(),
         )
     }
@@ -73,6 +76,7 @@ impl App {
         AccountUseCases::new(
             self.accounts.clone(),
             self.budget.clone(),
+            self.transfers.clone(),
             self.pricing.clone(),
             self.clock.clone(),
         )
@@ -82,6 +86,7 @@ impl App {
         DashboardUseCases::new(
             self.accounts.clone(),
             self.budget.clone(),
+            self.transfers.clone(),
             self.snapshots.clone(),
             self.pricing.clone(),
             self.clock.clone(),
@@ -92,6 +97,7 @@ impl App {
         BackupUseCases::new(
             self.accounts.clone(),
             self.budget.clone(),
+            self.transfers.clone(),
             self.snapshots.clone(),
             self.settings.clone(),
             self.dataset.clone(),
@@ -135,7 +141,6 @@ async fn full_journey_from_setup_to_restored_backup() {
             name: "Compte courant".into(),
             account_type: AccountType::Checking,
             color: None,
-            monthly_contribution: Money::ZERO,
         })
         .unwrap();
     phone
@@ -159,7 +164,6 @@ async fn full_journey_from_setup_to_restored_backup() {
             name: "Livret A".into(),
             account_type: AccountType::LivretA,
             color: None,
-            monthly_contribution: Money::new(dec!(200)),
         })
         .unwrap();
     phone

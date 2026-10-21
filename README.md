@@ -53,11 +53,19 @@ La version 0.2 elle-même s'installe une dernière fois à la main (depuis « de
 
 ### Compte courant
 
-Créer un compte « Compte courant », puis saisir son solde (case « découvert » pour un solde négatif). Les dépenses et revenus ponctuels saisis ensuite sont rattachés par défaut au premier compte courant (choix « Payé depuis » / « Versé sur ») et font évoluer son solde. Le salaire et les charges fixes ne sont pas imputés : recaler le solde de temps en temps (« Mettre à jour le solde ») ; les mouvements déjà saisis sont alors réputés inclus.
+Créer un compte « Compte courant », puis saisir son solde (case « découvert » pour un solde négatif). Les dépenses et revenus ponctuels saisis ensuite sont rattachés par défaut au premier compte courant (choix « Payé depuis » / « Versé sur ») et font évoluer son solde, comme les charges fixes prélevées sur ce compte (« Prélevée sur », jour du prélèvement) et les virements. Le salaire n'est pas imputé : recaler le solde de temps en temps (« Mettre à jour le solde ») ; les mouvements déjà saisis, et les échéances du jour même, sont alors réputés inclus. La fiche du compte liste les mouvements comptés depuis le dernier solde saisi.
 
+### Virements et comptes hors patrimoine (à partir de la v0.3)
+
+Bouton « + » › **Virement**, ou « Nouveau virement » sur la fiche d'un compte : départ, arrivée, montant, fréquence (ponctuel, mensuel, annuel). Un virement fait bouger les soldes des comptes courants, livrets et espèces d'un PEA ; la feuille affiche les soldes avant / après et prévient si un plafond de versement est dépassé.
+
+- **Montant reçu différent** : pour un abondement d'épargne salariale (net de prélèvements sociaux) ou des frais, saisir le montant réellement crédité ; rien n'est calculé.
+- **Comptes hors patrimoine** (compte joint, banque d'un crédit…) : créés depuis la feuille de virement (« + Hors patrimoine ») ou la page Comptes. Ils n'entrent ni dans le patrimoine ni dans la projection ; les virements vers eux comptent dans le budget du mois et réduisent la capacité d'épargne.
+- **Projection** : les virements récurrents alimentent les comptes mois par mois (un virement annuel dans son mois). Les anciens « versements mensuels programmés » sont convertis automatiquement en virements mensuels le 1er du mois depuis le premier compte courant.
+- Types de comptes : Autre livret (taux et plafond facultatif à renseigner), Assurance-vie ou PER, Épargne salariale (PEE, PEI, PERCO).
 ### Sauvegarde des données
 
-Réglages › **Exporter mes données** écrit un fichier JSON (sélecteur de fichiers Android). Il contient toutes les données en clair (format v2 depuis la v0.2 ; les exports v1 restent importables), sans le code PIN ni la clé Twelve Data : le conserver dans un endroit sûr. Réglages › **Importer une sauvegarde** le restaure (fichier entièrement vérifié avant tout remplacement). Un rappel s'affiche si aucun export n'a eu lieu depuis 30 jours.
+Réglages › **Exporter mes données** écrit un fichier JSON (sélecteur de fichiers Android). Il contient toutes les données en clair (format v3 depuis la v0.3 ; les exports v1 et v2 restent importables), sans le code PIN ni la clé Twelve Data : le conserver dans un endroit sûr. Réglages › **Importer une sauvegarde** le restaure (fichier entièrement vérifié avant tout remplacement). Un rappel s'affiche si aucun export n'a eu lieu depuis 30 jours.
 
 ### Cours des ETF
 

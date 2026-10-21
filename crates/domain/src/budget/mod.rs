@@ -9,6 +9,6 @@ mod income;
 
 pub use calculator::BudgetCalculator;
 pub use category::Category;
-pub use charge::{Periodicity, RecurringCharge};
+pub use charge::{Debit, Periodicity, RecurringCharge};
 pub use expense::Expense;
 pub use income::{OneOffIncome, SalaryEntry};

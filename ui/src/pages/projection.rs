@@ -162,8 +162,8 @@ fn ProjectionView(
         {excess.map(|amount| view! {
             <Notice
                 kind=NoticeKind::Warning
-                message=format!("Vos versements programmés dépassent votre capacité d'épargne de {}", format::amount(amount))
-                dismiss_key="versements-excessifs"
+                message=format!("Vos virements d'épargne programmés dépassent votre capacité d'épargne de {} par mois", format::amount(amount))
+                dismiss_key="virements-excessifs"
             />
         })}
 
@@ -173,7 +173,7 @@ fn ProjectionView(
                 <Amount value=projection.savings_capacity />
             </div>
             <div class="flex items-center justify-between">
-                <span class="text-sm text-muted">"Versements programmés"</span>
+                <span class="text-sm text-muted">"Virements d'épargne programmés (par mois)"</span>
                 <Amount value=projection.total_contributions />
             </div>
             <div class="flex items-center justify-between">

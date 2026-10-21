@@ -10,8 +10,9 @@ use lc_domain::{AccountId, Color, Decimal, DomainError, FundId, Label, Money, Ra
 
 use lc_domain::valuation::{AccountValuation, value_account};
 
-use crate::ports::{AccountRepository, BudgetRepository, Clock};
-use crate::pricing::{PricingIssue, PricingService, checking_ledger, tracked_assets};
+use crate::flows::build_ledger;
+use crate::ports::{AccountRepository, BudgetRepository, Clock, TransferRepository};
+use crate::pricing::{PricingIssue, PricingService, tracked_assets};
 use crate::{AppError, AppResult};
 
 /// Comptes et leur valorisation, avec les éventuels problèmes de cours.
@@ -37,14 +38,13 @@ pub struct NewAccount {
     pub account_type: AccountType,
     /// Couleur `#RRGGBB` ; la couleur par défaut du type si absente.
     pub color: Option<String>,
-    pub monthly_contribution: Money,
 }
 
+/// Les versements se programment désormais par des virements récurrents.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AccountUpdate {
     pub name: String,
     pub color: String,
-    pub monthly_contribution: Money,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,8 +56,9 @@ pub struct FundInput {
 
 pub struct AccountUseCases {
     repo: Arc<dyn AccountRepository>,
-    /// Mouvements rattachés aux comptes courants.
+    /// Sources du grand livre (dépenses, revenus, charges prélevées, virements).
     budget: Arc<dyn BudgetRepository>,
+    transfers: Arc<dyn TransferRepository>,
     pricing: Arc<PricingService>,
     clock: Arc<dyn Clock>,
 }
@@ -66,12 +67,14 @@ impl AccountUseCases {
     pub fn new(
         repo: Arc<dyn AccountRepository>,
         budget: Arc<dyn BudgetRepository>,
+        transfers: Arc<dyn TransferRepository>,
         pricing: Arc<PricingService>,
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
             repo,
             budget,
+            transfers,
             pricing,
             clock,
         }
@@ -94,7 +97,7 @@ impl AccountUseCases {
             .pricing
             .prices_for(&tracked_assets_of_all(&accounts), false)
             .await?;
-        let ledger = checking_ledger(self.budget.as_ref())?;
+        let ledger = self.ledger()?;
         Ok(ValuedAccounts {
             accounts: accounts
                 .into_iter()
@@ -120,9 +123,17 @@ impl AccountUseCases {
                 false,
             )
             .await?;
-        let ledger = checking_ledger(self.budget.as_ref())?;
+        let ledger = self.ledger()?;
         let valuation = value_account(&account, &refresh.prices, &ledger);
         Ok((account, valuation, refresh.issues))
+    }
+
+    fn ledger(&self) -> AppResult<lc_domain::ledger::Ledger> {
+        build_ledger(
+            self.budget.as_ref(),
+            self.transfers.as_ref(),
+            self.clock.today(),
+        )
     }
 
     pub fn create_account(&self, input: NewAccount) -> AppResult<AccountId> {
@@ -130,14 +141,13 @@ impl AccountUseCases {
             Some(hex) => Color::new(hex)?,
             None => defaults::color(input.account_type),
         };
-        let mut account = Account::open(
+        let account = Account::open(
             AccountId::generate(),
             Label::new(&input.name)?,
             color,
             input.account_type,
             self.clock.today(),
         );
-        account.set_monthly_contribution(input.monthly_contribution)?;
         self.repo.save(&account)?;
         Ok(account.id())
     }
@@ -148,7 +158,7 @@ impl AccountUseCases {
         self.modify(id, |account| {
             account.rename(name);
             account.set_color(color);
-            account.set_monthly_contribution(input.monthly_contribution)
+            Ok(())
         })
     }
 
@@ -167,14 +177,14 @@ impl AccountUseCases {
         })
     }
 
-    /// Mise à jour du solde d'un livret (positif ou nul) ou d'un compte courant (signé), datée du
-    /// jour. Pour un compte courant, le solde saisi devient la nouvelle référence : les mouvements
-    /// déjà saisis sont réputés inclus.
+    /// Mise à jour du solde d'un livret ou d'une assurance-vie (positif ou nul) ou d'un compte
+    /// courant (signé), datée du jour. Le solde saisi devient la nouvelle référence : les
+    /// mouvements déjà passés sont réputés inclus.
     pub fn update_balance(&self, id: AccountId, balance: Money) -> AppResult<()> {
         let (today, now) = (self.clock.today(), self.clock.now());
         self.modify(id, |account| match account.account_type() {
             AccountType::Checking => account.update_checking_balance(balance, today, now),
-            _ => account.update_savings_balance(balance, today),
+            _ => account.update_savings_balance(balance, today, now),
         })
     }
 
@@ -182,7 +192,7 @@ impl AccountUseCases {
         &self,
         id: AccountId,
         rate: Rate,
-        deposit_ceiling: Money,
+        deposit_ceiling: Option<Money>,
     ) -> AppResult<()> {
         self.modify(id, |account| {
             account.set_savings_terms(rate, deposit_ceiling)
@@ -197,8 +207,10 @@ impl AccountUseCases {
         })
     }
 
+    /// Nouveau solde espèces d'un compte-titres (référence pour les virements suivants).
     pub fn set_cash(&self, id: AccountId, cash: Money) -> AppResult<()> {
-        self.modify(id, |account| account.set_cash(cash))
+        let (today, now) = (self.clock.today(), self.clock.now());
+        self.modify(id, |account| account.set_cash(cash, today, now))
     }
 
     pub fn upsert_position(
@@ -338,7 +350,7 @@ mod tests {
     use super::*;
     use crate::budget::ExpenseInput;
     use crate::testing::{TestEnv, asset};
-    use lc_domain::account::CheckingLedger;
+    use lc_domain::ledger::Ledger;
     use lc_domain::valuation::{NavKind, PriceBook, value_account};
     use pollster::block_on;
     use rust_decimal_macros::dec;
@@ -348,7 +360,6 @@ mod tests {
             name: name.into(),
             account_type,
             color: None,
-            monthly_contribution: Money::ZERO,
         }
     }
 
@@ -458,7 +469,7 @@ mod tests {
         assert_eq!(pea.name().as_str(), "PEA Bourso");
         assert_eq!(pea.color(), &defaults::color(AccountType::Pea));
         assert_eq!(
-            value_account(&pea, &PriceBook::default(), &CheckingLedger::default()).value,
+            value_account(&pea, &PriceBook::default(), &Ledger::default()).value,
             Money::ZERO
         );
     }
@@ -616,7 +627,7 @@ mod tests {
                 .prices_for(&[asset(QuoteSource::TwelveData, "IWDA")], false),
         )
         .unwrap();
-        let valuation = value_account(&account, &refresh.prices, &CheckingLedger::default());
+        let valuation = value_account(&account, &refresh.prices, &Ledger::default());
         assert_eq!(valuation.funds[0].nav, Money::new(dec!(26)));
         assert_eq!(valuation.funds[0].nav_kind, NavKind::Estimated);
 

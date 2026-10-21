@@ -3,6 +3,7 @@ use lc_application::ports::{Dataset, DatasetStore, StorageResult};
 use super::accounts::save_account;
 use super::budget::{save_category, save_charge, save_expense, save_one_off_income, save_salary};
 use super::snapshots::save_snapshot;
+use super::transfers::{save_external_account, save_transfer};
 use super::{Database, SqlResultExt};
 
 /// Remplacement de toutes les données métier (import), en une seule transaction. Les réglages
@@ -21,7 +22,9 @@ impl DatasetStore for SqliteDatasetStore {
     fn replace_all(&self, data: &Dataset) -> StorageResult<()> {
         self.db.write(|tx| {
             tx.execute_batch(
-                "DELETE FROM snapshot_lines;
+                "DELETE FROM transfers;
+                 DELETE FROM external_accounts;
+                 DELETE FROM snapshot_lines;
                  DELETE FROM snapshots;
                  DELETE FROM positions;
                  DELETE FROM pei_funds;
@@ -53,6 +56,12 @@ impl DatasetStore for SqliteDatasetStore {
             }
             for snapshot in &data.snapshots {
                 save_snapshot(tx, snapshot)?;
+            }
+            for account in &data.external_accounts {
+                save_external_account(tx, account)?;
+            }
+            for transfer in &data.transfers {
+                save_transfer(tx, transfer)?;
             }
             Ok(())
         })

@@ -108,7 +108,7 @@ pub fn BudgetPage() -> impl IntoView {
 
         <ExpensesSection expenses=expenses filter=filter categories=category_list checking=checking_list open_new=expense_open on_saved=reload />
         <IncomesSection summary=summary salaries=salaries incomes=incomes checking=checking_list open_income=income_open on_saved=reload />
-        <ChargesSection charges=charges categories=category_list on_saved=reload />
+        <ChargesSection charges=charges categories=category_list checking=checking_list on_saved=reload />
 
         <button class=BTN_SECONDARY on:click=move |_| categories_open.set(true)>"Gérer les catégories"</button>
         <CategoriesSheet open=categories_open categories=category_list on_saved=reload />
@@ -140,6 +140,8 @@ fn SummaryCard(summary: BudgetSummaryDto) -> impl IntoView {
             {row("Charges fixes (par mois)", summary.fixed_charges)}
             {row("Dépenses du mois", summary.expenses)}
             {row("Dépenses moyennes (3 mois)", summary.average_expenses)}
+            {(!summary.external_out.is_zero()).then(|| row("Virements hors patrimoine", summary.external_out))}
+            {(!summary.external_in.is_zero()).then(|| row("Reçus de l'extérieur", summary.external_in))}
             <div class="mt-1 flex items-center justify-between border-t border-line pt-3">
                 <span class="font-medium">"Capacité d'épargne"</span>
                 <Amount value=capacity class=format!("text-lg font-semibold {capacity_color}") />

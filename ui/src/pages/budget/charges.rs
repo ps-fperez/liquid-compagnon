@@ -1,8 +1,11 @@
 use std::collections::HashMap;
 
-use lc_shared_dto::{CategoryDto, ChargeDto, ChargeInput, IdInput, PeriodicityDto};
+use lc_shared_dto::{
+    AccountOptionDto, CategoryDto, ChargeDto, ChargeInput, IdInput, PeriodicityDto,
+};
 use leptos::prelude::*;
 
+use super::account_choice::{AccountChoice, AccountSelection, resolve};
 use crate::api;
 use crate::components::Busy;
 use crate::components::amount_hint;
@@ -25,6 +28,7 @@ fn periodicity_label(periodicity: PeriodicityDto) -> &'static str {
 pub fn ChargesSection(
     charges: Loaded<Vec<ChargeDto>>,
     categories: Signal<Vec<CategoryDto>>,
+    checking: Signal<Vec<AccountOptionDto>>,
     on_saved: Callback<()>,
 ) -> impl IntoView {
     let new_open = RwSignal::new(false);
@@ -68,7 +72,7 @@ pub fn ChargesSection(
                                 >
                                     <span class="flex min-w-0 flex-col">
                                         <span class="truncate text-sm">{charge.label}</span>
-                                        <span class="text-xs text-muted">{periodicity_label(charge.periodicity)} " · " {category}</span>
+                                        <span class="text-xs text-muted">{periodicity_label(charge.periodicity)} " · " {category} {charge.debit_day.map(|day| format!(" · prélevée le {day}"))}</span>
                                     </span>
                                     <span class="flex flex-col items-end">
                                         <Amount value=charge.amount />
@@ -82,11 +86,11 @@ pub fn ChargesSection(
                 .into_any()
             }}
         </section>
-        <ChargeSheet open=new_open categories=categories existing=None on_saved=on_saved />
+        <ChargeSheet open=new_open categories=categories checking=checking existing=None on_saved=on_saved />
         {move || editing.get().map(|charge| {
             let open = RwSignal::new(true);
             Effect::new(move |_| if !open.get() { editing.set(None) });
-            view! { <ChargeSheet open=open categories=categories existing=Some(charge) on_saved=on_saved /> }
+            view! { <ChargeSheet open=open categories=categories checking=checking existing=Some(charge) on_saved=on_saved /> }
         })}
     }
 }
@@ -95,6 +99,7 @@ pub fn ChargesSection(
 fn ChargeSheet(
     open: RwSignal<bool>,
     categories: Signal<Vec<CategoryDto>>,
+    checking: Signal<Vec<AccountOptionDto>>,
     existing: Option<ChargeDto>,
     on_saved: Callback<()>,
 ) -> impl IntoView {
@@ -128,6 +133,17 @@ fn ChargeSheet(
             .and_then(|c| c.end.clone())
             .unwrap_or_default(),
     );
+    // Nouvelle charge : prélevée par défaut sur le premier compte courant. Une charge existante sans
+    // compte le reste tant que l'utilisateur ne la rattache pas.
+    let debit: AccountSelection =
+        RwSignal::new(existing.as_ref().map(|c| c.debit_account_id.clone()));
+    let debit_day = RwSignal::new(
+        existing
+            .as_ref()
+            .and_then(|c| c.debit_day)
+            .unwrap_or(1)
+            .to_string(),
+    );
     let error = RwSignal::new(None::<String>);
     let busy = RwSignal::new(false);
     let ids = StoredValue::new((
@@ -143,6 +159,14 @@ fn ChargeSheet(
         let Some(category_id) = category.get_untracked() else {
             return error.set(Some("Choisissez une catégorie".into()));
         };
+        let debit_account_id = resolve(debit.get_untracked(), &checking.get_untracked());
+        let debit_day = match debit_account_id {
+            None => None,
+            Some(_) => match debit_day.get_untracked().trim().parse::<u8>() {
+                Ok(day @ 1..=31) => Some(day),
+                _ => return error.set(Some("Jour du prélèvement : entre 1 et 31".into())),
+            },
+        };
         let input = ChargeInput {
             id: ids.get_value().0,
             label: label.get_untracked(),
@@ -151,6 +175,8 @@ fn ChargeSheet(
             periodicity: periodicity.get_untracked(),
             start: start.get_untracked(),
             end: Some(end.get_untracked()).filter(|e| !e.trim().is_empty()),
+            debit_account_id,
+            debit_day,
         };
         run_action(busy, error, api::upsert_charge(input), move |_: String| {
             toast::success("Charge fixe enregistrée");
@@ -216,6 +242,10 @@ fn ChargeSheet(
                         }}
                     </div>
                 </div>
+                <AccountChoice label="Prélevée sur" options=checking selection=debit />
+                {move || resolve(debit.get(), &checking.get()).map(|_| view! {
+                    <Field label="Jour du prélèvement" value=debit_day input_mode="numeric" hint="Le solde du compte baisse ce jour-là (dernier jour pour un mois plus court)" />
+                })}
                 <div class="grid grid-cols-2 gap-2">
                     <Field label="Depuis" value=start input_type="month" />
                     <Field label="Jusqu'à (facultatif)" value=end input_type="month" />

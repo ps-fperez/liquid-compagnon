@@ -1,4 +1,5 @@
 use super::{Expense, OneOffIncome, RecurringCharge, SalaryEntry};
+use crate::transfer::{Schedule, Transfer};
 use crate::{CategoryId, Money, Month};
 
 /// Calculs budgétaires sur un mois : revenus, charges, dépenses et capacité d'épargne.
@@ -8,6 +9,7 @@ pub struct BudgetCalculator<'a> {
     one_off_incomes: &'a [OneOffIncome],
     charges: &'a [RecurringCharge],
     expenses: &'a [Expense],
+    transfers: &'a [Transfer],
 }
 
 impl<'a> BudgetCalculator<'a> {
@@ -25,7 +27,71 @@ impl<'a> BudgetCalculator<'a> {
             one_off_incomes,
             charges,
             expenses,
+            transfers: &[],
         }
+    }
+
+    /// Ajoute les virements : ceux échangés avec un compte hors patrimoine entrent dans le budget
+    /// (sorties et entrées du foyer) ; ceux entre comptes suivis sont neutres.
+    pub fn with_transfers(mut self, transfers: &'a [Transfer]) -> Self {
+        self.transfers = transfers;
+        self
+    }
+
+    /// Virements du mois vers un compte hors patrimoine (montants envoyés).
+    pub fn external_out_for(&self, month: Month) -> Money {
+        self.transfers
+            .iter()
+            .filter(|t| t.to().is_external() && !t.from().is_external())
+            .map(|t| t.sent().times(occurrences(t.schedule(), month)))
+            .sum()
+    }
+
+    /// Virements du mois depuis un compte hors patrimoine (montants reçus).
+    pub fn external_in_for(&self, month: Month) -> Money {
+        self.transfers
+            .iter()
+            .filter(|t| t.from().is_external() && !t.to().is_external())
+            .map(|t| t.received().times(occurrences(t.schedule(), month)))
+            .sum()
+    }
+
+    /// Équivalent mensuel net des virements récurrents avec l'extérieur actifs en `month`
+    /// (sorties − entrées ; un virement annuel compte pour 1/12).
+    pub fn recurring_external_net_for(&self, month: Month) -> Money {
+        self.transfers
+            .iter()
+            .filter_map(|t| {
+                let monthly = match t.schedule() {
+                    Schedule::Once { .. } => return None,
+                    Schedule::Monthly { from, until, .. } => {
+                        let active = month >= from && until.is_none_or(|until| month <= until);
+                        if !active {
+                            return None;
+                        }
+                        Money::new(rust_decimal::Decimal::ONE)
+                    }
+                    Schedule::Yearly {
+                        from_year,
+                        until_year,
+                        ..
+                    } => {
+                        let active = month.year() >= from_year
+                            && until_year.is_none_or(|until| month.year() <= until);
+                        if !active {
+                            return None;
+                        }
+                        Money::new(rust_decimal::Decimal::ONE).divided_by(12)?
+                    }
+                };
+                let factor = monthly.amount();
+                match (t.from().is_external(), t.to().is_external()) {
+                    (false, true) => Some(t.sent().times(factor)),
+                    (true, false) => Some(-t.received().times(factor)),
+                    _ => None,
+                }
+            })
+            .sum()
     }
 
     /// Salaire applicable : celui dont la date d'effet est la plus récente sans dépasser `month`.
@@ -101,14 +167,19 @@ impl<'a> BudgetCalculator<'a> {
     }
 
     /// Capacité d'épargne mensuelle : salaire applicable − charges fixes − moyenne des dépenses
-    /// ponctuelles. Peut être négative.
+    /// ponctuelles − virements récurrents nets vers l'extérieur. Peut être négative.
     pub fn savings_capacity(&self, current: Month) -> Money {
         self.salary_for(current)
             - self.fixed_charges_for(current)
             - self.average_monthly_expenses(current)
+            - self.recurring_external_net_for(current)
     }
 }
 
+/// Nombre d'occurrences d'un virement dans le mois, en décimal pour multiplier un montant.
+fn occurrences(schedule: Schedule, month: Month) -> rust_decimal::Decimal {
+    rust_decimal::Decimal::from(schedule.occurrences_in(month).len())
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,5 +370,79 @@ mod tests {
             eur(42)
         );
         assert_eq!(budget.expenses_for(month(2026, 10)), eur(141));
+    }
+
+    // Spec account-transfers : « Sortie vers le compte joint »
+    #[test]
+    fn external_transfers_count_in_the_budget() {
+        use crate::transfer::{Endpoint, Schedule, Transfer};
+        use crate::{AccountId, ExternalId, TransferId};
+        use chrono::{TimeZone, Utc};
+        use rust_decimal_macros::dec;
+
+        let checking = Endpoint::Account(AccountId::generate());
+        let ldds = Endpoint::Account(AccountId::generate());
+        let joint = Endpoint::External(ExternalId::generate());
+        let transfer = |from, to, amount: Decimal, schedule| {
+            Transfer::new(
+                TransferId::generate(),
+                from,
+                to,
+                Money::new(amount),
+                Money::new(amount),
+                None,
+                schedule,
+                Utc.with_ymd_and_hms(2026, 10, 1, 9, 0, 0).unwrap(),
+            )
+            .unwrap()
+        };
+        let transfers = [
+            transfer(
+                ldds,
+                joint,
+                dec!(600),
+                Schedule::Once {
+                    date: NaiveDate::from_ymd_opt(2026, 10, 12).unwrap(),
+                },
+            ),
+            transfer(
+                checking,
+                joint,
+                dec!(1560),
+                Schedule::Monthly {
+                    day: 1,
+                    from: month(2026, 1),
+                    until: None,
+                },
+            ),
+            // Entre comptes suivis : neutre.
+            transfer(
+                checking,
+                ldds,
+                dec!(850),
+                Schedule::Monthly {
+                    day: 1,
+                    from: month(2026, 1),
+                    until: None,
+                },
+            ),
+        ];
+        let salaries =
+            [
+                SalaryEntry::new(SalaryId::generate(), month(2026, 1), Money::new(dec!(3340)))
+                    .unwrap(),
+            ];
+        let calculator = BudgetCalculator::new(&salaries, &[], &[], &[]).with_transfers(&transfers);
+
+        assert_eq!(
+            calculator.external_out_for(month(2026, 10)),
+            Money::new(dec!(2160))
+        );
+        assert_eq!(calculator.external_in_for(month(2026, 10)), Money::ZERO);
+        assert_eq!(
+            calculator.savings_capacity(month(2026, 10)),
+            Money::new(dec!(1780)),
+            "3 340 − 1 560"
+        );
     }
 }

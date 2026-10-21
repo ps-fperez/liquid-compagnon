@@ -9,13 +9,14 @@ use chrono::Duration;
 pub use records::*;
 
 use crate::AppResult;
+use crate::flows::convert_scheduled_contributions;
 use crate::ports::{
     AccountRepository, BackupCodec, BudgetRepository, Clock, Dataset, DatasetStore, SettingsStore,
-    SnapshotRepository,
+    SnapshotRepository, TransferRepository,
 };
 
 /// Version du format d'export produit par cette version de l'application.
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 3;
 
 /// Résumé d'un import réussi.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,6 +29,7 @@ pub struct ImportSummary {
 pub struct BackupUseCases {
     accounts: Arc<dyn AccountRepository>,
     budget: Arc<dyn BudgetRepository>,
+    transfers: Arc<dyn TransferRepository>,
     snapshots: Arc<dyn SnapshotRepository>,
     settings: Arc<dyn SettingsStore>,
     store: Arc<dyn DatasetStore>,
@@ -39,9 +41,12 @@ impl BackupUseCases {
     /// Délai au-delà duquel un rappel d'export est affiché.
     pub const EXPORT_REMINDER_DAYS: i64 = 30;
 
+    // Un dépôt par famille de données exportées : les regrouper masquerait les dépendances.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         accounts: Arc<dyn AccountRepository>,
         budget: Arc<dyn BudgetRepository>,
+        transfers: Arc<dyn TransferRepository>,
         snapshots: Arc<dyn SnapshotRepository>,
         settings: Arc<dyn SettingsStore>,
         store: Arc<dyn DatasetStore>,
@@ -51,6 +56,7 @@ impl BackupUseCases {
         Self {
             accounts,
             budget,
+            transfers,
             snapshots,
             settings,
             store,
@@ -77,6 +83,8 @@ impl BackupUseCases {
             expenses: self.budget.expenses()?,
             accounts: self.accounts.list()?,
             snapshots: self.snapshots.list()?,
+            transfers: self.transfers.transfers()?,
+            external_accounts: self.transfers.external_accounts()?,
         };
         let now = self.clock.now();
         let bytes = self
@@ -91,6 +99,13 @@ impl BackupUseCases {
     pub fn import(&self, bytes: &[u8]) -> AppResult<ImportSummary> {
         let dataset = self.codec.decode(bytes)?.into_dataset()?;
         self.store.replace_all(&dataset)?;
+        // Les versements programmés d'un ancien export deviennent des virements mensuels.
+        convert_scheduled_contributions(
+            self.accounts.as_ref(),
+            self.transfers.as_ref(),
+            self.clock.today(),
+            self.clock.now(),
+        )?;
         Ok(ImportSummary {
             accounts: dataset.accounts.len(),
             expenses: dataset.expenses.len(),
@@ -122,8 +137,11 @@ mod tests {
     use crate::accounts::{FundInput, NewAccount};
     use crate::budget::{ChargeInput, ExpenseInput};
     use crate::testing::{TestEnv, asset};
+    use crate::transfers::TransferInput;
     use lc_domain::account::{AccountType, QuoteSource};
+    use lc_domain::budget::Debit;
     use lc_domain::budget::Periodicity;
+    use lc_domain::transfer::{Endpoint, Schedule};
     use lc_domain::{Money, Month};
     use pollster::block_on;
     use rust_decimal_macros::dec;
@@ -155,6 +173,7 @@ mod tests {
                     periodicity: Periodicity::Yearly,
                     start: Month::new(2026, 1).unwrap(),
                     end: Some(Month::new(2027, 12).unwrap()),
+                    debit: None,
                 },
             )
             .unwrap();
@@ -173,7 +192,6 @@ mod tests {
             name: name.into(),
             account_type,
             color: None,
-            monthly_contribution: Money::new(dec!(100)),
         };
         let livret = accounts
             .create_account(new("Livret A", AccountType::LivretA))
@@ -228,6 +246,67 @@ mod tests {
                 Some(checking),
             )
             .unwrap();
+        // Format v3 : virements mensuel, ponctuel vers l'extérieur, annuel abondé ; charge
+        // prélevée sur le compte courant.
+        let transfers = env.transfers();
+        let joint = transfers.create_external_account("Compte joint").unwrap();
+        let monthly = |day| Schedule::Monthly {
+            day,
+            from: Month::of(env.clock.today()),
+            until: None,
+        };
+        for input in [
+            TransferInput {
+                from: Endpoint::Account(checking),
+                to: Endpoint::Account(livret),
+                sent: Money::new(dec!(850)),
+                received: None,
+                label: None,
+                schedule: monthly(1),
+            },
+            TransferInput {
+                from: Endpoint::Account(livret),
+                to: Endpoint::External(joint),
+                sent: Money::new(dec!(600)),
+                received: None,
+                label: Some("Vacances".into()),
+                schedule: Schedule::Once {
+                    date: env.clock.today(),
+                },
+            },
+            TransferInput {
+                from: Endpoint::Account(checking),
+                to: Endpoint::Account(pei),
+                sent: Money::new(dec!(500)),
+                received: Some(Money::new(dec!(1493.30))),
+                label: None,
+                schedule: Schedule::Yearly {
+                    month: 1,
+                    day: 15,
+                    from_year: 2027,
+                    until_year: None,
+                },
+            },
+        ] {
+            transfers.create_transfer(input).unwrap();
+        }
+        budget
+            .upsert_charge(
+                None,
+                ChargeInput {
+                    label: "Sosh".into(),
+                    amount: Money::new(dec!(15.99)),
+                    category,
+                    periodicity: Periodicity::Monthly,
+                    start: Month::new(2026, 1).unwrap(),
+                    end: None,
+                    debit: Some(Debit {
+                        account: checking,
+                        day: 5,
+                    }),
+                },
+            )
+            .unwrap();
         let closed = accounts
             .create_account(new("Ancien PEA", AccountType::Pea))
             .unwrap();
@@ -273,6 +352,24 @@ mod tests {
             target.snapshots.list().unwrap(),
             source.snapshots.list().unwrap()
         );
+        // Spec generic-accounts : « Aller-retour v3 »
+        assert_eq!(
+            target.transfers_repo.transfers().unwrap(),
+            source.transfers_repo.transfers().unwrap()
+        );
+        assert_eq!(
+            target.transfers_repo.external_accounts().unwrap(),
+            source.transfers_repo.external_accounts().unwrap()
+        );
+        let values = |env: &TestEnv| {
+            block_on(env.accounts().valued_accounts(true))
+                .unwrap()
+                .accounts
+                .into_iter()
+                .map(|(account, valuation)| (account.id(), valuation.value))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(values(&target), values(&source));
     }
 
     #[test]
@@ -288,7 +385,7 @@ mod tests {
 
         assert!(!json.contains("secret-key"));
         assert!(!json.contains(&env.settings.pin_hash().unwrap().unwrap()));
-        assert!(json.contains("\"schema_version\":2"));
+        assert!(json.contains("\"schema_version\":3"));
         assert_eq!(
             env.settings.last_export_at().unwrap(),
             Some(env.clock.now())

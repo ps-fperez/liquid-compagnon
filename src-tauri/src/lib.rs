@@ -107,6 +107,13 @@ pub fn run() {
             commands::accounts::update_pei_fund,
             commands::accounts::record_pei_nav,
             commands::accounts::remove_pei_fund,
+            commands::transfers::list_transfers,
+            commands::transfers::save_transfer,
+            commands::transfers::delete_transfer,
+            commands::transfers::list_external_accounts,
+            commands::transfers::create_external_account,
+            commands::transfers::rename_external_account,
+            commands::transfers::delete_external_account,
             // Budget
             commands::budget::budget_summary,
             commands::budget::list_categories,

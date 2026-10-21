@@ -30,6 +30,10 @@ pub fn QuickAddSheet(open: RwSignal<bool>) -> impl IntoView {
                     <Icon name=IconName::Coins class="size-6 text-gain" />
                     <span class="font-medium">"Revenu ponctuel"</span>
                 </button>
+                <button class="flex min-h-14 items-center gap-3 rounded-xl bg-surface-raised px-4 text-left" on:click=go("/comptes?saisie=virement")>
+                    <Icon name=IconName::Transfer class="size-6 text-primary-soft" />
+                    <span class="font-medium">"Virement"</span>
+                </button>
                 <button class="flex min-h-14 items-center gap-3 rounded-xl bg-surface-raised px-4 text-left" on:click=go("/comptes?saisie=solde")>
                     <Icon name=IconName::Wallet class="size-6 text-secondary-light" />
                     <span class="font-medium">"Mise à jour d'un solde"</span>

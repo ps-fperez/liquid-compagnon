@@ -174,6 +174,26 @@ Légende de couverture :
 | Autorisation manquante | — | [ ] Premier essai : réglage « Installer des applis inconnues » ouvert |
 | Vérification automatique désactivée | src-tauri : `automatic_checks_are_spaced_by_six_hours` | [ ] Option désactivée : pas d'invitation |
 
+## Virements et comptes génériques (account-transfers, generic-accounts, scheduled-debits, v0.3)
+
+| Scénario | Couverture automatique | Téléphone |
+|---|---|---|
+| Rapatriement ponctuel | app : `one_off_transfers_move_balances` · e2e 13 | [ ] Livret → compte courant : les deux soldes bougent |
+| Virement vers un compte hors patrimoine | app : `one_off_transfers_move_balances` · e2e 13 | [ ] Compte joint créé depuis la feuille |
+| Virement mensuel | app : `monthly_transfer_applies_on_each_due_date` · e2e 13 | [ ] Épargne du mois vers le LDDS |
+| Côtés identiques | dom : `endpoints_must_differ_and_include_a_tracked_account` · app : `invalid_endpoints_are_refused` | — |
+| Épargne salariale abondée | dom : `received_amount_may_exceed_sent_amount`, `yearly_flow_lands_in_its_month_only` · e2e 13 | [ ] 300 → 812,70 et 200 → 180,60 en janvier |
+| Virement déjà inclus dans le solde saisi | dom : `scheduled_occurrence_of_the_reference_day_is_already_included` · e2e 13 | — |
+| Plafond dépassé | e2e 13 (aperçu) | [ ] Alerte sur un Livret A proche du plafond |
+| Suppression refusée | app : `external_account_in_use_cannot_be_deleted` | — |
+| Sortie vers le compte joint | dom : `external_transfers_count_in_the_budget`, `outgoing_flows_reduce_the_account` · app : `external_outflows_show_in_the_budget_and_yearly_bonus_in_the_projection` · e2e 13 | [ ] Budget : « Virements hors patrimoine » |
+| Fil du compte courant | dom : `checking_follows_debits_and_transfers_after_the_reference` · e2e 13 | [ ] Icônes et compte d'en face |
+| LEP / Livret sans plafond | dom : `livret_without_ceiling_never_reaches_it` · infra : `roundtrips_generic_livrets_and_life_insurance` · e2e 13 | — |
+| Mise à jour de l'application | app : `scheduled_contributions_become_monthly_transfers` | [ ] Versements programmés retrouvés en virements |
+| Aller-retour v3 | app : `export_then_import_restores_identical_data` · infra : `version_1_exports_are_still_readable`, `migration_table_matches_schema_version` | — |
+| Abonnement prélevé | dom : `checking_follows_debits_and_transfers_after_the_reference` · app : `debited_charge_lowers_the_checking_balance_after_its_day` | [ ] Abonnement prélevé le 5 |
+| Jour absent du mois | dom : `monthly_occurrences_clamp_to_the_last_day` | — |
+| Nouvelle charge | e2e 13 (compte courant proposé, jour du prélèvement) | — |
 ## Anomalies
 | # | Écran | Description | Statut |
 |---|---|---|---|

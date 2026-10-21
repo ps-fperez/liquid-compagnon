@@ -1,19 +1,14 @@
-//! Compte courant : un solde de référence saisi par l'utilisateur, que font évoluer les dépenses
-//! et revenus ponctuels rattachés, saisis après cette référence.
-
-use std::collections::HashMap;
+//! Compte courant : un solde de référence saisi par l'utilisateur (signé : un découvert est
+//! possible), que font évoluer les mouvements du grand livre postérieurs à cette référence.
 
 use chrono::{DateTime, NaiveDate, Utc};
 
-use crate::budget::{Expense, OneOffIncome};
-use crate::{AccountId, DomainError, Money};
+use crate::ledger::{BalanceReference, Movement, Statement};
+use crate::{DomainError, Money};
 
-/// Solde de référence d'un compte courant (signé : un découvert est possible).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CheckingDetails {
-    reference_balance: Money,
-    reference_on: NaiveDate,
-    reference_at: DateTime<Utc>,
+    reference: BalanceReference,
 }
 
 impl CheckingDetails {
@@ -23,44 +18,34 @@ impl CheckingDetails {
         reference_at: DateTime<Utc>,
     ) -> Result<Self, DomainError> {
         Ok(Self {
-            reference_balance: reference_balance.validate_signed()?,
-            reference_on,
-            reference_at,
+            reference: BalanceReference::new(
+                reference_balance.validate_signed()?,
+                reference_on,
+                reference_at,
+            ),
         })
     }
 
+    pub fn reference(&self) -> &BalanceReference {
+        &self.reference
+    }
+
     pub fn reference_balance(&self) -> Money {
-        self.reference_balance
+        self.reference.amount
     }
 
     /// Date de la référence, dans le fuseau de l'utilisateur.
     pub fn reference_on(&self) -> NaiveDate {
-        self.reference_on
+        self.reference.on
     }
 
     pub fn reference_at(&self) -> DateTime<Utc> {
-        self.reference_at
-    }
-
-    /// Un mouvement compte s'il a été saisi après la référence et qu'il est daté du jour de la
-    /// référence ou après. Sinon, il est réputé déjà inclus dans le solde saisi.
-    pub fn counts(&self, movement: &Movement) -> bool {
-        movement.recorded_at > self.reference_at && movement.date >= self.reference_on
+        self.reference.at
     }
 
     /// Solde courant et mouvements comptés (du plus récent au plus ancien).
-    pub fn statement(&self, movements: &[Movement]) -> CheckingStatement {
-        let mut counted: Vec<Movement> = movements
-            .iter()
-            .filter(|m| self.counts(m))
-            .cloned()
-            .collect();
-        counted.sort_by_key(|m| std::cmp::Reverse((m.date, m.recorded_at)));
-        let balance = self.reference_balance + counted.iter().map(Movement::signed_amount).sum();
-        CheckingStatement {
-            balance,
-            movements: counted,
-        }
+    pub fn statement(&self, movements: &[Movement]) -> Statement {
+        self.reference.statement(movements)
     }
 
     pub(super) fn reset(
@@ -74,92 +59,10 @@ impl CheckingDetails {
     }
 }
 
-/// Solde courant d'un compte courant et mouvements pris en compte.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CheckingStatement {
-    pub balance: Money,
-    pub movements: Vec<Movement>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MovementKind {
-    Expense,
-    Income,
-}
-
-/// Dépense ou revenu ponctuel rattaché à un compte courant.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Movement {
-    pub kind: MovementKind,
-    /// Montant positif ; le sens est donné par `kind`.
-    pub amount: Money,
-    pub date: NaiveDate,
-    pub recorded_at: DateTime<Utc>,
-    pub label: Option<String>,
-}
-
-impl Movement {
-    pub fn signed_amount(&self) -> Money {
-        match self.kind {
-            MovementKind::Expense => -self.amount,
-            MovementKind::Income => self.amount,
-        }
-    }
-}
-
-/// Mouvements rattachés, regroupés par compte courant.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct CheckingLedger {
-    by_account: HashMap<AccountId, Vec<Movement>>,
-}
-
-impl CheckingLedger {
-    /// Seuls les mouvements rattachés à un compte et horodatés sont retenus.
-    pub fn from_budget(expenses: &[Expense], incomes: &[OneOffIncome]) -> Self {
-        let mut ledger = Self::default();
-        for expense in expenses {
-            if let (Some(account), Some(recorded_at)) = (expense.account(), expense.recorded_at()) {
-                ledger.push(
-                    account,
-                    Movement {
-                        kind: MovementKind::Expense,
-                        amount: expense.amount(),
-                        date: expense.date(),
-                        recorded_at,
-                        label: expense.label().map(ToString::to_string),
-                    },
-                );
-            }
-        }
-        for income in incomes {
-            if let (Some(account), Some(recorded_at)) = (income.account(), income.recorded_at()) {
-                ledger.push(
-                    account,
-                    Movement {
-                        kind: MovementKind::Income,
-                        amount: income.amount(),
-                        date: income.date(),
-                        recorded_at,
-                        label: Some(income.label().to_string()),
-                    },
-                );
-            }
-        }
-        ledger
-    }
-
-    pub fn movements(&self, account: AccountId) -> &[Movement] {
-        self.by_account.get(&account).map_or(&[], Vec::as_slice)
-    }
-
-    fn push(&mut self, account: AccountId, movement: Movement) {
-        self.by_account.entry(account).or_default().push(movement);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ledger::{MovementKind, Timing};
     use chrono::TimeZone;
     use rust_decimal_macros::dec;
 
@@ -176,8 +79,9 @@ mod tests {
             kind,
             amount,
             date: day(date),
-            recorded_at: recorded,
+            timing: Timing::Recorded(recorded),
             label: None,
+            counterpart: None,
         }
     }
 
@@ -241,8 +145,9 @@ mod tests {
     fn checking_account_is_valued_from_its_reference_and_ledger() {
         use crate::account::{Account, AccountType, ScenarioRates};
         use crate::budget::Expense;
+        use crate::ledger::{Ledger, LedgerSources};
         use crate::valuation::{PriceBook, value_account};
-        use crate::{CategoryId, ExpenseId, Label, Rate, defaults};
+        use crate::{AccountId, CategoryId, ExpenseId, Label, Rate, defaults};
 
         let mut account = Account::open(
             AccountId::generate(),
@@ -264,7 +169,14 @@ mod tests {
         .unwrap()
         .linked_to(Some(account.id()))
         .recorded(Some(at(20, 18)));
-        let ledger = CheckingLedger::from_budget(&[groceries], &[]);
+        let expenses = [groceries];
+        let ledger = Ledger::build(&LedgerSources {
+            expenses: &expenses,
+            incomes: &[],
+            charges: &[],
+            transfers: &[],
+            today: day(21),
+        });
 
         let valuation = value_account(&account, &PriceBook::default(), &ledger);
 
@@ -275,36 +187,5 @@ mod tests {
             ScenarioRates::uniform(Rate::ZERO),
             "pas de rendement en projection"
         );
-        assert_eq!(account.account_type(), AccountType::Checking);
-    }
-
-    #[test]
-    fn ledger_keeps_only_linked_and_timestamped_movements() {
-        use crate::budget::Expense;
-        use crate::{CategoryId, ExpenseId};
-
-        let account = AccountId::generate();
-        let expense = |linked: Option<AccountId>, recorded: Option<DateTime<Utc>>| {
-            Expense::new(
-                ExpenseId::generate(),
-                Money::new(dec!(10)),
-                CategoryId::generate(),
-                day(21),
-                None,
-            )
-            .unwrap()
-            .linked_to(linked)
-            .recorded(recorded)
-        };
-        let expenses = [
-            expense(Some(account), Some(at(21, 9))),
-            expense(None, Some(at(21, 9))),
-            expense(Some(account), None),
-        ];
-
-        let ledger = CheckingLedger::from_budget(&expenses, &[]);
-
-        assert_eq!(ledger.movements(account).len(), 1);
-        assert!(ledger.movements(AccountId::generate()).is_empty());
     }
 }

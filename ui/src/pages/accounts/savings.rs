@@ -10,13 +10,15 @@ use crate::components::{Amount, BottomSheet, Card, Field};
 use crate::format;
 use crate::util::run_action;
 
-/// Fiche d'un Livret A / LDDS : solde, taux, plafond.
+/// Fiche d'un livret ou d'une assurance-vie : solde courant (dernier solde saisi et virements
+/// comptés depuis), taux, plafond facultatif.
 #[component]
 pub fn SavingsDetails(
     account_id: String,
     balance: Decimal,
+    reference_balance: Decimal,
     rate_percent: Decimal,
-    deposit_ceiling: Decimal,
+    deposit_ceiling: Option<Decimal>,
     balance_updated_on: NaiveDate,
     ceiling_reached: bool,
     on_saved: Callback<()>,
@@ -26,10 +28,14 @@ pub fn SavingsDetails(
     view! {
         <Card class="flex flex-col gap-3">
             <div class="flex items-center justify-between">
-                <span class="text-sm text-muted">"Solde"</span>
+                <span class="text-sm text-muted">"Solde actuel"</span>
+                <Amount value=balance class="text-lg font-semibold" />
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="text-sm text-muted">"Dernier solde saisi"</span>
                 <span class="flex flex-col items-end">
-                    <Amount value=balance class="font-medium" />
-                    <span class="text-xs text-muted">"mis à jour le " {format::date(balance_updated_on)}</span>
+                    <Amount value=reference_balance />
+                    <span class="text-xs text-muted">"le " {format::date(balance_updated_on)}</span>
                 </span>
             </div>
             <div class="flex items-center justify-between">
@@ -38,7 +44,10 @@ pub fn SavingsDetails(
             </div>
             <div class="flex items-center justify-between">
                 <span class="text-sm text-muted">"Plafond de versement"</span>
-                <Amount value=deposit_ceiling />
+                {match deposit_ceiling {
+                    Some(ceiling) => view! { <Amount value=ceiling /> }.into_any(),
+                    None => view! { <span class="text-sm text-muted">"Aucun"</span> }.into_any(),
+                }}
             </div>
             {ceiling_reached.then(|| view! {
                 <p class="rounded-xl bg-secondary/10 px-3 py-2 text-sm text-secondary-light">
@@ -54,7 +63,6 @@ pub fn SavingsDetails(
         <TermsSheet open=terms_open account_id=account_id rate_percent=rate_percent deposit_ceiling=deposit_ceiling on_saved=on_saved />
     }
 }
-
 /// Nouveau solde d'un livret ou, avec `allow_negative`, d'un compte courant (le clavier
 /// numérique d'Android n'a pas toujours de signe moins : un interrupteur « Découvert » le remplace).
 #[component]
@@ -117,11 +125,11 @@ fn TermsSheet(
     open: RwSignal<bool>,
     account_id: String,
     rate_percent: Decimal,
-    deposit_ceiling: Decimal,
+    deposit_ceiling: Option<Decimal>,
     on_saved: Callback<()>,
 ) -> impl IntoView {
     let rate = RwSignal::new(format::quantity(rate_percent));
-    let ceiling = RwSignal::new(format::quantity(deposit_ceiling));
+    let ceiling = RwSignal::new(deposit_ceiling.map(format::quantity).unwrap_or_default());
     let error = RwSignal::new(None::<String>);
     let busy = RwSignal::new(false);
     let account_id = StoredValue::new(account_id);
@@ -130,8 +138,10 @@ fn TermsSheet(
             Ok(rate) => rate,
             Err(message) => return error.set(Some(message)),
         };
-        let deposit_ceiling = match format::parse_amount(&ceiling.get_untracked()) {
-            Ok(ceiling) => ceiling,
+        let raw_ceiling = ceiling.get_untracked();
+        let deposit_ceiling = match format::parse_amount(&raw_ceiling) {
+            _ if raw_ceiling.trim().is_empty() => None,
+            Ok(ceiling) => Some(ceiling),
             Err(message) => return error.set(Some(message)),
         };
         let input = SavingsTermsInput {
@@ -149,7 +159,7 @@ fn TermsSheet(
         <BottomSheet open=open title="Taux et plafond">
             <div class="flex flex-col gap-4">
                 <Field label="Taux annuel" value=rate input_mode="decimal" suffix="%" />
-                <Field label="Plafond de versement" value=ceiling input_mode="decimal" suffix="€" />
+                <Field label="Plafond de versement (facultatif)" value=ceiling input_mode="decimal" suffix="€" hint="Laissez vide s'il n'y en a pas" />
                 <p class="text-xs text-muted">
                     "Si vos rendements de projection suivent le taux du livret, ils sont mis à jour aussi."
                 </p>

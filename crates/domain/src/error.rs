@@ -31,6 +31,12 @@ pub enum DomainError {
     UnknownFund,
     #[error("Position introuvable dans ce compte")]
     UnknownPosition,
+    #[error("Choisissez deux comptes différents")]
+    SameTransferEndpoints,
+    #[error("Un virement doit partir d'un de vos comptes ou y arriver")]
+    TransferWithoutTrackedAccount,
+    #[error("Jour du mois invalide (1 à 31)")]
+    InvalidDayOfMonth,
     #[error("Cette valeur de part est plus ancienne que la dernière saisie")]
     OutdatedNav,
 }

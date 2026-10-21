@@ -9,10 +9,12 @@ pub mod backup;
 pub mod budget;
 pub mod dashboard;
 mod error;
+mod flows;
 pub mod ports;
 pub mod pricing;
 pub mod projection;
 pub mod security;
+pub mod transfers;
 pub mod updates;
 
 #[cfg(test)]

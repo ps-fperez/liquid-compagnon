@@ -10,8 +10,11 @@ use lc_domain::{
 
 use crate::AppResult;
 use crate::budget::{BudgetSummary, summarize};
-use crate::ports::{AccountRepository, BudgetRepository, Clock, SnapshotRepository};
-use crate::pricing::{PricingIssue, PricingService, checking_ledger, value_active_accounts};
+use crate::flows::build_ledger;
+use crate::ports::{
+    AccountRepository, BudgetRepository, Clock, SnapshotRepository, TransferRepository,
+};
+use crate::pricing::{PricingIssue, PricingService, value_active_accounts};
 
 /// Variation par rapport au dernier snapshot automatique.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,6 +68,7 @@ pub struct Dashboard {
 pub struct DashboardUseCases {
     accounts: Arc<dyn AccountRepository>,
     budget: Arc<dyn BudgetRepository>,
+    transfers: Arc<dyn TransferRepository>,
     snapshots: Arc<dyn SnapshotRepository>,
     pricing: Arc<PricingService>,
     clock: Arc<dyn Clock>,
@@ -74,6 +78,7 @@ impl DashboardUseCases {
     pub fn new(
         accounts: Arc<dyn AccountRepository>,
         budget: Arc<dyn BudgetRepository>,
+        transfers: Arc<dyn TransferRepository>,
         snapshots: Arc<dyn SnapshotRepository>,
         pricing: Arc<PricingService>,
         clock: Arc<dyn Clock>,
@@ -81,6 +86,7 @@ impl DashboardUseCases {
         Self {
             accounts,
             budget,
+            transfers,
             snapshots,
             pricing,
             clock,
@@ -93,7 +99,11 @@ impl DashboardUseCases {
         let (valued, pricing_issues) = value_active_accounts(
             self.accounts.list()?,
             &self.pricing,
-            &checking_ledger(self.budget.as_ref())?,
+            &build_ledger(
+                self.budget.as_ref(),
+                self.transfers.as_ref(),
+                self.clock.today(),
+            )?,
             force_refresh,
         )
         .await?;
@@ -131,7 +141,11 @@ impl DashboardUseCases {
             total,
             variation: reference.map(|s| Variation::between(s.total(), total)),
             accounts,
-            budget: summarize(self.budget.as_ref(), Month::of(today))?,
+            budget: summarize(
+                self.budget.as_ref(),
+                self.transfers.as_ref(),
+                Month::of(today),
+            )?,
             history: history(&snapshots),
             pricing_issues,
         })
@@ -142,7 +156,11 @@ impl DashboardUseCases {
         let (valued, _) = value_active_accounts(
             self.accounts.list()?,
             &self.pricing,
-            &checking_ledger(self.budget.as_ref())?,
+            &build_ledger(
+                self.budget.as_ref(),
+                self.transfers.as_ref(),
+                self.clock.today(),
+            )?,
             false,
         )
         .await?;
@@ -210,7 +228,6 @@ mod tests {
                 name: name.into(),
                 account_type,
                 color: None,
-                monthly_contribution: Money::ZERO,
             })
             .unwrap()
     }

@@ -1,6 +1,6 @@
 use lc_application::ports::{BudgetRepository, StorageResult};
 use lc_domain::budget::{
-    Category, Expense, OneOffIncome, Periodicity, RecurringCharge, SalaryEntry,
+    Category, Debit, Expense, OneOffIncome, Periodicity, RecurringCharge, SalaryEntry,
 };
 use lc_domain::{AccountId, CategoryId, ChargeId, ExpenseId, IncomeId, Label, SalaryId};
 use rusqlite::{Connection, Params, Row, params};
@@ -151,30 +151,53 @@ impl BudgetRepository for SqliteBudgetRepository {
         self.db.read(|conn| {
             load(
                 conn,
-                "SELECT id, label, amount, category_id, periodicity, start_month, end_month
+                "SELECT id, label, amount, category_id, periodicity, start_month, end_month,
+                     debit_account_id, debit_day
                  FROM recurring_charges ORDER BY rowid",
                 [],
                 |row| {
                     Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, String>(2)?,
-                        row.get::<_, String>(3)?,
-                        row.get::<_, String>(4)?,
-                        row.get::<_, String>(5)?,
-                        row.get::<_, Option<String>>(6)?,
+                        (
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, String>(2)?,
+                            row.get::<_, String>(3)?,
+                        ),
+                        (
+                            row.get::<_, String>(4)?,
+                            row.get::<_, String>(5)?,
+                            row.get::<_, Option<String>>(6)?,
+                        ),
+                        (
+                            row.get::<_, Option<String>>(7)?,
+                            row.get::<_, Option<u8>>(8)?,
+                        ),
                     ))
                 },
-                |(id, label, amount, category, periodicity, start, end)| {
-                    domain(RecurringCharge::new(
-                        ChargeId::from_uuid(uuid(&id)?),
-                        domain(Label::new(&label))?,
-                        money(&amount)?,
-                        CategoryId::from_uuid(uuid(&category)?),
-                        periodicity_from_sql(&periodicity)?,
-                        month(&start)?,
-                        end.as_deref().map(month).transpose()?,
-                    ))
+                |(
+                    (id, label, amount, category),
+                    (periodicity, start, end),
+                    (debit_account, debit_day),
+                )| {
+                    let debit = match (debit_account, debit_day) {
+                        (Some(account), Some(day)) => Some(Debit {
+                            account: AccountId::from_uuid(uuid(&account)?),
+                            day,
+                        }),
+                        _ => None,
+                    };
+                    domain(
+                        RecurringCharge::new(
+                            ChargeId::from_uuid(uuid(&id)?),
+                            domain(Label::new(&label))?,
+                            money(&amount)?,
+                            CategoryId::from_uuid(uuid(&category)?),
+                            periodicity_from_sql(&periodicity)?,
+                            month(&start)?,
+                            end.as_deref().map(month).transpose()?,
+                        )
+                        .and_then(|charge| charge.with_debit(debit)),
+                    )
                 },
             )
         })
@@ -295,11 +318,12 @@ pub(crate) fn save_one_off_income(conn: &Connection, income: &OneOffIncome) -> S
 pub(crate) fn save_charge(conn: &Connection, charge: &RecurringCharge) -> StorageResult<()> {
     conn.execute(
         "INSERT INTO recurring_charges (id, label, amount, category_id, periodicity, start_month,
-             end_month)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             end_month, debit_account_id, debit_day)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
          ON CONFLICT(id) DO UPDATE SET label = excluded.label, amount = excluded.amount,
              category_id = excluded.category_id, periodicity = excluded.periodicity,
-             start_month = excluded.start_month, end_month = excluded.end_month",
+             start_month = excluded.start_month, end_month = excluded.end_month,
+             debit_account_id = excluded.debit_account_id, debit_day = excluded.debit_day",
         params![
             charge.id().to_string(),
             charge.label().as_str(),
@@ -308,6 +332,8 @@ pub(crate) fn save_charge(conn: &Connection, charge: &RecurringCharge) -> Storag
             periodicity_to_sql(charge.periodicity()),
             charge.start().to_string(),
             charge.end().map(|end| end.to_string()),
+            charge.debit().map(|d| d.account.to_string()),
+            charge.debit().map(|d| d.day),
         ],
     )
     .db()
