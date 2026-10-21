@@ -61,6 +61,8 @@ pub fn scenario_rates(account_type: AccountType, savings_rate: Option<Rate>) -> 
             neutral: percent(dec!(5)),
             optimistic: percent(dec!(50)),
         },
+        // Pas de rendement : le compte courant reste à son solde dans la projection.
+        AccountType::Checking => ScenarioRates::uniform(Rate::ZERO),
     }
 }
 
@@ -72,6 +74,7 @@ pub fn color(account_type: AccountType) -> Color {
         AccountType::Pea => "#3B82F6",
         AccountType::Pei => "#60A5FA",
         AccountType::Crypto => "#7C3AED",
+        AccountType::Checking => "#22D3EE",
     };
     Color::new(hex).expect("les couleurs par défaut sont valides")
 }

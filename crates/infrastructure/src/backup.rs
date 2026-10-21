@@ -9,7 +9,13 @@ type Migration = fn(&mut Value) -> Result<(), String>;
 
 /// `MIGRATIONS[i]` fait passer un export de la version `i + 1` à la version `i + 2`.
 /// Il en faut exactement `SCHEMA_VERSION - 1`.
-const MIGRATIONS: &[Migration] = &[];
+const MIGRATIONS: &[Migration] = &[v1_to_v2];
+
+/// Version 2 : comptes courants et rattachement des mouvements. Les nouveaux champs sont
+/// facultatifs : un export v1 est valide tel quel (aucun compte courant, aucun rattachement).
+fn v1_to_v2(_: &mut Value) -> Result<(), String> {
+    Ok(())
+}
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct JsonBackupCodec;
@@ -93,8 +99,30 @@ mod tests {
 
         let bytes = codec.encode(&original).unwrap();
 
-        assert!(String::from_utf8_lossy(&bytes).contains("\"schema_version\": 1"));
+        assert!(String::from_utf8_lossy(&bytes).contains("\"schema_version\": 2"));
         assert_eq!(codec.decode(&bytes).unwrap(), original);
+    }
+
+    // Spec checking-account : « Ancien fichier »
+    #[test]
+    fn version_1_exports_are_still_readable() {
+        let mut v1 = serde_json::to_value(sample()).unwrap();
+        v1["schema_version"] = json!(1);
+        v1["expenses"] = json!([{
+            "id": "6f1c1a4e-8d0e-4a7b-9d43-2a2f0c6f0b11",
+            "amount": "42.50",
+            "category_id": "0b8f2d0e-1c3a-4e5f-8a9b-7c6d5e4f3a21",
+            "date": "2026-10-20",
+            "label": "Courses"
+        }]);
+
+        let decoded = JsonBackupCodec
+            .decode(&serde_json::to_vec(&v1).unwrap())
+            .unwrap();
+
+        assert_eq!(decoded.schema_version, SCHEMA_VERSION);
+        assert_eq!(decoded.expenses[0].account_id, None);
+        assert_eq!(decoded.expenses[0].recorded_at, None);
     }
 
     // Spec data-backup : « Fichier invalide »

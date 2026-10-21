@@ -15,6 +15,8 @@ pub enum ErrorCode {
     Pricing,
     Backup,
     Biometric,
+    /// Vérification ou téléchargement d'une mise à jour impossible.
+    Update,
     Storage,
     Internal,
 }

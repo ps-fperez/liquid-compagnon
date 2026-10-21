@@ -15,7 +15,7 @@ use crate::ports::{
 };
 
 /// Version du format d'export produit par cette version de l'application.
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// Résumé d'un import réussi.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -137,7 +137,13 @@ mod tests {
             .upsert_salary(None, Month::new(2026, 1).unwrap(), Money::new(dec!(3200)))
             .unwrap();
         budget
-            .upsert_one_off_income(None, "Prime", Money::new(dec!(1500)), env.clock.today())
+            .upsert_one_off_income(
+                None,
+                "Prime",
+                Money::new(dec!(1500)),
+                env.clock.today(),
+                None,
+            )
             .unwrap();
         budget
             .upsert_charge(
@@ -158,6 +164,7 @@ mod tests {
                 category,
                 date: None,
                 label: Some("Courses".into()),
+                account: None,
             })
             .unwrap();
 
@@ -172,7 +179,7 @@ mod tests {
             .create_account(new("Livret A", AccountType::LivretA))
             .unwrap();
         accounts
-            .update_savings_balance(livret, Money::new(dec!(10640)))
+            .update_balance(livret, Money::new(dec!(10640)))
             .unwrap();
         let wallet = accounts
             .create_account(new("Crypto", AccountType::Crypto))
@@ -195,6 +202,32 @@ mod tests {
             reference: Some(asset(QuoteSource::TwelveData, "IWDA")),
         };
         block_on(accounts.create_pei_fund(pei, fund, Money::new(dec!(25)))).unwrap();
+        // Compte courant avec une dépense et un revenu rattachés (format v2).
+        let checking = accounts
+            .create_account(new("Compte courant", AccountType::Checking))
+            .unwrap();
+        accounts
+            .update_balance(checking, Money::new(dec!(-85.40)))
+            .unwrap();
+        env.clock.advance(chrono::Duration::minutes(1));
+        budget
+            .add_expense(ExpenseInput {
+                amount: Money::new(dec!(12)),
+                category,
+                date: None,
+                label: Some("Boulangerie".into()),
+                account: Some(checking),
+            })
+            .unwrap();
+        budget
+            .upsert_one_off_income(
+                None,
+                "Remboursement",
+                Money::new(dec!(30)),
+                env.clock.today(),
+                Some(checking),
+            )
+            .unwrap();
         let closed = accounts
             .create_account(new("Ancien PEA", AccountType::Pea))
             .unwrap();
@@ -215,8 +248,8 @@ mod tests {
         assert_eq!(
             summary,
             ImportSummary {
-                accounts: 4,
-                expenses: 1,
+                accounts: 5,
+                expenses: 2,
                 snapshots: 1
             }
         );
@@ -255,7 +288,7 @@ mod tests {
 
         assert!(!json.contains("secret-key"));
         assert!(!json.contains(&env.settings.pin_hash().unwrap().unwrap()));
-        assert!(json.contains("\"schema_version\":1"));
+        assert!(json.contains("\"schema_version\":2"));
         assert_eq!(
             env.settings.last_export_at().unwrap(),
             Some(env.clock.now())

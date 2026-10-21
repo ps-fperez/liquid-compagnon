@@ -81,6 +81,14 @@ impl Money {
         Ok(self)
     }
 
+    /// Valide un solde signé (compte courant à découvert) : au plus 2 décimales.
+    pub fn validate_signed(self) -> Result<Self, DomainError> {
+        if !self.has_at_most_cents() {
+            return Err(DomainError::TooManyDecimals);
+        }
+        Ok(self)
+    }
+
     /// Valide un solde ou un montant pouvant être nul : positif ou nul, au plus 2 décimales.
     pub fn validate_balance(self) -> Result<Self, DomainError> {
         if self.is_negative() {

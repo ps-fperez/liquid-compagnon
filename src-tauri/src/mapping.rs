@@ -8,7 +8,8 @@ use lc_application::dashboard::{Dashboard, Variation};
 use lc_application::pricing::PricingIssue;
 use lc_application::projection::ProjectionReport;
 use lc_domain::account::{
-    Account, AccountKind, AccountType, AssetRef, CurrencyCode, QuoteSource, Scenario, ScenarioRates,
+    Account, AccountKind, AccountType, AssetRef, CurrencyCode, MovementKind, QuoteSource, Scenario,
+    ScenarioRates,
 };
 use lc_domain::budget::{
     Category, Expense, OneOffIncome, Periodicity, RecurringCharge, SalaryEntry,
@@ -57,6 +58,7 @@ pub fn account_type(dto: AccountTypeDto) -> AccountType {
         AccountTypeDto::Pea => AccountType::Pea,
         AccountTypeDto::Pei => AccountType::Pei,
         AccountTypeDto::Crypto => AccountType::Crypto,
+        AccountTypeDto::Checking => AccountType::Checking,
     }
 }
 
@@ -96,6 +98,7 @@ pub fn account_type_dto(account_type: AccountType) -> AccountTypeDto {
         AccountType::Pea => AccountTypeDto::Pea,
         AccountType::Pei => AccountTypeDto::Pei,
         AccountType::Crypto => AccountTypeDto::Crypto,
+        AccountType::Checking => AccountTypeDto::Checking,
     }
 }
 
@@ -262,6 +265,24 @@ pub fn account_dto(account: &Account, valuation: &AccountValuation) -> AccountDt
             cash: d.cash().amount(),
             positions: valuation.positions.iter().map(position_dto).collect(),
         },
+        AccountKind::Checking(d) => AccountDetailsDto::Checking {
+            balance: valuation.value.amount(),
+            reference_balance: d.reference_balance().amount(),
+            reference_on: d.reference_on(),
+            movements: valuation
+                .movements
+                .iter()
+                .map(|m| CheckingMovementDto {
+                    kind: match m.kind {
+                        MovementKind::Expense => MovementKindDto::Expense,
+                        MovementKind::Income => MovementKindDto::Income,
+                    },
+                    amount: m.signed_amount().amount(),
+                    date: m.date,
+                    label: m.label.clone(),
+                })
+                .collect(),
+        },
         AccountKind::EmployeeSavings(_) => AccountDetailsDto::EmployeeSavings {
             funds: valuation
                 .funds
@@ -306,6 +327,7 @@ pub fn one_off_income_dto(income: &OneOffIncome) -> OneOffIncomeDto {
         label: income.label().to_string(),
         amount: income.amount().amount(),
         date: income.date(),
+        account_id: income.account().map(|id| id.to_string()),
     }
 }
 
@@ -333,6 +355,7 @@ pub fn expense_dto(expense: &Expense) -> ExpenseDto {
         category_id: expense.category().to_string(),
         date: expense.date(),
         label: expense.label().map(|label| label.to_string()),
+        account_id: expense.account().map(|id| id.to_string()),
     }
 }
 
@@ -391,7 +414,7 @@ pub fn projection_dto(report: &ProjectionReport, accounts: &[Account]) -> Projec
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lc_domain::account::Position;
+    use lc_domain::account::{CheckingLedger, Position};
     use lc_domain::valuation::{PriceBook, Quote, QuoteFreshness, value_account};
     use lc_domain::{CategoryId, Label, Money, NaiveDate, defaults};
     use lc_shared_dto::ErrorCode;
@@ -452,7 +475,10 @@ mod tests {
             QuoteFreshness::Live,
         )]);
 
-        let dto = account_dto(&wallet, &value_account(&wallet, &prices));
+        let dto = account_dto(
+            &wallet,
+            &value_account(&wallet, &prices, &CheckingLedger::default()),
+        );
 
         assert_eq!(dto.value, dec!(9000));
         assert_eq!(dto.provenance, ProvenanceDto::Live);

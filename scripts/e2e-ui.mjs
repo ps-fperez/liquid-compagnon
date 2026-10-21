@@ -246,6 +246,9 @@ const plugins = await evaluate(
 if (plugins !== "function/function/function") await fail(`plugins dialog/fs non exposés : ${plugins}`);
 const backup = await evaluate("window.__TAURI__.core.invoke('export_backup').then(b => b.content)");
 if (!backup?.includes('"schema_version"') || backup.includes("argon2")) await fail("export invalide ou contenant le PIN");
+// Mises à jour : un build local n'en propose jamais (aucune requête réseau).
+await waitForText("Vérifier maintenant");
+await waitForText("build de développement");
 await shot("reglages");
 
 console.log("11. Robustesse : import invalide, clé Twelve Data absente");
@@ -269,6 +272,49 @@ await waitForText("Clé Twelve Data absente ou invalide");
 await waitForText("prix de revient"); // valorisé sans cours ni appel réseau
 await waitForText("12 140,25 €"); // 10 640,25 + 500 + 2 × 500
 await shot("cle-absente");
+
+console.log("12. Compte courant : solde de référence, dépense rattachée, découvert");
+await click("Comptes");
+await click("Nouveau");
+await click("Compte courant");
+await click("Créer le compte");
+await waitForText("Aucun mouvement depuis");
+await click("Mettre à jour le solde");
+await fill("Nouveau solde", "1000");
+await click("Enregistrer");
+await waitForText("1 000,00 €");
+await sleep(50); // la dépense est saisie strictement après la référence
+await click("Saisie rapide");
+await click("Dépense");
+await waitForText("Payé depuis");
+await fill("Montant", "20");
+await click("Alimentation"); // compte courant présélectionné : toujours trois gestes
+await waitForText("72,50 €"); // dépenses du mois : 42,50 + 10 + 20
+const openChecking = () =>
+  evaluate(`(() => {
+    const link = [...document.querySelectorAll('a[href^="/comptes/"]')].find(a => a.textContent.includes("Compte courant"));
+    link?.click();
+    return Boolean(link);
+  })()`);
+await click("Comptes");
+await waitForText("Compte courant");
+if (!(await openChecking())) await fail("compte courant introuvable dans la liste");
+await waitForText("Dernier solde saisi");
+await waitForText("980,00 €"); // 1 000 − 20
+await shot("compte-courant");
+await click("Mettre à jour le solde");
+await fill("Nouveau solde", "85,40");
+await evaluate(`(() => {
+  const box = document.querySelector('[role="dialog"] input[type="checkbox"]');
+  box.checked = true;
+  box.dispatchEvent(new Event("change", { bubbles: true }));
+})()`);
+await click("Enregistrer");
+await waitForText("−85,40 €");
+await waitForText("Aucun mouvement depuis"); // la nouvelle référence inclut la dépense
+await click("Accueil");
+await waitForText("12 054,85 €"); // 12 140,25 − 85,40
+await shot("compte-courant-decouvert");
 
 ws.close();
 if (errors.length > 0) {

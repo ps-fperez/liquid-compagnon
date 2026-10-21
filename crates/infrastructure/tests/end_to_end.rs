@@ -62,12 +62,17 @@ impl App {
     }
 
     fn budget(&self) -> BudgetUseCases {
-        BudgetUseCases::new(self.budget.clone(), self.clock.clone())
+        BudgetUseCases::new(
+            self.budget.clone(),
+            self.accounts.clone(),
+            self.clock.clone(),
+        )
     }
 
     fn accounts(&self) -> AccountUseCases {
         AccountUseCases::new(
             self.accounts.clone(),
+            self.budget.clone(),
             self.pricing.clone(),
             self.clock.clone(),
         )
@@ -123,6 +128,21 @@ async fn full_journey_from_setup_to_restored_backup() {
         .budget()
         .upsert_salary(None, Month::of(phone.clock.today()), Money::new(dec!(3200)))
         .unwrap();
+    // Compte courant : solde de référence, puis une dépense rattachée saisie après.
+    let checking = phone
+        .accounts()
+        .create_account(NewAccount {
+            name: "Compte courant".into(),
+            account_type: AccountType::Checking,
+            color: None,
+            monthly_contribution: Money::ZERO,
+        })
+        .unwrap();
+    phone
+        .accounts()
+        .update_balance(checking, Money::new(dec!(1000)))
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(20));
     phone
         .budget()
         .add_expense(ExpenseInput {
@@ -130,6 +150,7 @@ async fn full_journey_from_setup_to_restored_backup() {
             category: food,
             date: None,
             label: None,
+            account: Some(checking),
         })
         .unwrap();
     let livret = phone
@@ -143,12 +164,13 @@ async fn full_journey_from_setup_to_restored_backup() {
         .unwrap();
     phone
         .accounts()
-        .update_savings_balance(livret, Money::new(dec!(10640)))
+        .update_balance(livret, Money::new(dec!(10640)))
         .unwrap();
 
     // Tableau de bord : total et snapshot automatique persistés.
     let dashboard = phone.dashboard().dashboard(false).await.unwrap();
-    assert_eq!(dashboard.total, Money::new(dec!(10640)));
+    // 10 640 € (livret) + 1 000 € − 42,50 € (compte courant).
+    assert_eq!(dashboard.total, Money::new(dec!(11597.50)));
     assert_eq!(dashboard.budget.expenses, Money::new(dec!(42.50)));
     assert_eq!(phone.snapshots.list().unwrap().len(), 1);
 
@@ -191,5 +213,5 @@ async fn full_journey_from_setup_to_restored_backup() {
             .import(b"{\"schema_version\": 1, \"oups\": true}")
             .is_err()
     );
-    assert_eq!(new_phone.accounts.list().unwrap().len(), 1);
+    assert_eq!(new_phone.accounts.list().unwrap().len(), 2);
 }

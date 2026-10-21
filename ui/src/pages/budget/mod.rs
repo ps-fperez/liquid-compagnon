@@ -1,13 +1,14 @@
 //! Budget : synthèse du mois, dépenses, revenus, charges fixes et catégories.
 
+mod account_choice;
 mod categories;
 mod charges;
 mod expenses;
 mod incomes;
 
 use lc_shared_dto::{
-    BudgetSummaryDto, CategoryDto, ChargeDto, ErrorDto, ExpenseFilterInput, ExpenseListDto,
-    IncludeArchivedInput, MonthInput, OneOffIncomeDto, SalaryDto,
+    AccountOptionDto, BudgetSummaryDto, CategoryDto, ChargeDto, ErrorDto, ExpenseFilterInput,
+    ExpenseListDto, IncludeArchivedInput, MonthInput, OneOffIncomeDto, SalaryDto,
 };
 use leptos::prelude::*;
 use leptos_router::hooks::use_query_map;
@@ -45,6 +46,7 @@ pub fn BudgetPage() -> impl IntoView {
     let salaries = RwSignal::new(None::<Result<Vec<SalaryDto>, ErrorDto>>);
     let incomes = RwSignal::new(None::<Result<Vec<OneOffIncomeDto>, ErrorDto>>);
     let charges = RwSignal::new(None::<Result<Vec<ChargeDto>, ErrorDto>>);
+    let checking = RwSignal::new(None::<Result<Vec<AccountOptionDto>, ErrorDto>>);
 
     let reload = Callback::new(move |_: ()| {
         let selected = month.get_untracked();
@@ -74,6 +76,7 @@ pub fn BudgetPage() -> impl IntoView {
             })
         });
         load(charges, api::list_charges);
+        load(checking, api::checking_accounts);
     });
     Effect::new(move |_| {
         month.track();
@@ -83,6 +86,8 @@ pub fn BudgetPage() -> impl IntoView {
 
     let category_list =
         Signal::derive(move || categories.get().and_then(Result::ok).unwrap_or_default());
+    let checking_list =
+        Signal::derive(move || checking.get().and_then(Result::ok).unwrap_or_default());
 
     view! {
         <div class="flex items-center justify-between">
@@ -101,8 +106,8 @@ pub fn BudgetPage() -> impl IntoView {
             Some(Ok(summary)) => view! { <SummaryCard summary=summary /> }.into_any(),
         }}
 
-        <ExpensesSection expenses=expenses filter=filter categories=category_list open_new=expense_open on_saved=reload />
-        <IncomesSection summary=summary salaries=salaries incomes=incomes open_income=income_open on_saved=reload />
+        <ExpensesSection expenses=expenses filter=filter categories=category_list checking=checking_list open_new=expense_open on_saved=reload />
+        <IncomesSection summary=summary salaries=salaries incomes=incomes checking=checking_list open_income=income_open on_saved=reload />
         <ChargesSection charges=charges categories=category_list on_saved=reload />
 
         <button class=BTN_SECONDARY on:click=move |_| categories_open.set(true)>"Gérer les catégories"</button>

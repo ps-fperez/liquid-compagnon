@@ -14,6 +14,32 @@ use crate::state;
 extern "C" {
     #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "core"], js_name = invoke, catch)]
     async fn tauri_invoke(cmd: &str, args: JsValue) -> Result<JsValue, JsValue>;
+
+    #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "event"], js_name = listen, catch)]
+    async fn tauri_listen(
+        event: &str,
+        handler: &Closure<dyn FnMut(JsValue)>,
+    ) -> Result<JsValue, JsValue>;
+}
+
+/// Écoute un événement émis par le backend pendant toute la vie de l'application (le
+/// gestionnaire n'est jamais retiré : à n'appeler qu'une fois par événement).
+pub async fn listen_forever<T: DeserializeOwned + 'static>(
+    event: &str,
+    on_event: impl Fn(T) + 'static,
+) {
+    if !tauri_available() {
+        return;
+    }
+    let handler = Closure::<dyn FnMut(JsValue)>::new(move |raw: JsValue| {
+        let payload = js_sys::Reflect::get(&raw, &JsValue::from_str("payload")).unwrap_or(raw);
+        if let Ok(value) = serde_wasm_bindgen::from_value(payload) {
+            on_event(value);
+        }
+    });
+    if tauri_listen(event, &handler).await.is_ok() {
+        handler.forget();
+    }
 }
 
 pub type ApiResult<T> = Result<T, ErrorDto>;
@@ -99,6 +125,9 @@ commands_without_input! {
     // Budget
     salary_history -> Vec<SalaryDto>;
     list_charges -> Vec<ChargeDto>;
+    checking_accounts -> Vec<AccountOptionDto>;
+    /// Télécharge, vérifie et ouvre l'installeur Android (progression : update-progress).
+    install_update -> InstallOutcomeDto;
     expense_suggestions -> Vec<LabelSuggestionDto>;
 }
 
@@ -119,13 +148,15 @@ commands_with_input! {
     update_account(AccountUpdateInput) -> ();
     archive_account(IdInput) -> ();
     unarchive_account(IdInput) -> ();
-    update_savings_balance(SavingsBalanceInput) -> ();
+    /// Livret (positif ou nul) ou compte courant (signé, devient la référence).
+    update_balance(BalanceInput) -> ();
     set_savings_terms(SavingsTermsInput) -> ();
     set_scenario_rates(ScenarioRatesInput) -> ();
     set_cash(CashInput) -> ();
     upsert_position(PositionInput) -> ();
     remove_position(RemovePositionInput) -> ();
     search_assets(AssetSearchInput) -> Vec<AssetDto>;
+    check_for_update(UpdateCheckInput) -> UpdateCheckDto;
     /// Offre associée à la clé (`None` pour une source sans compte).
     price_source_status(QuoteSourceDto) -> Option<String>;
     create_pei_fund(NewFundInput) -> String;

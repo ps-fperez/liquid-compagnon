@@ -467,11 +467,20 @@ impl TestEnv {
     }
 
     pub fn budget(&self) -> BudgetUseCases {
-        BudgetUseCases::new(self.budget_repo.clone(), self.clock.clone())
+        BudgetUseCases::new(
+            self.budget_repo.clone(),
+            self.accounts.clone(),
+            self.clock.clone(),
+        )
     }
 
     pub fn accounts(&self) -> AccountUseCases {
-        AccountUseCases::new(self.accounts.clone(), self.pricing(), self.clock.clone())
+        AccountUseCases::new(
+            self.accounts.clone(),
+            self.budget_repo.clone(),
+            self.pricing(),
+            self.clock.clone(),
+        )
     }
 
     pub fn dashboard(&self) -> DashboardUseCases {

@@ -8,6 +8,7 @@ pub mod accounts;
 pub mod budget;
 pub mod overview;
 pub mod session;
+pub mod updates;
 
 use std::sync::Arc;
 

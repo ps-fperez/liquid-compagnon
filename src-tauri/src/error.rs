@@ -20,6 +20,7 @@ pub fn app_error(error: AppError) -> ErrorDto {
         },
         AppError::NotFound(_) => ErrorDto::new(ErrorCode::NotFound, message),
         AppError::Domain(_)
+        | AppError::InvalidAccountLink
         | AppError::InvalidPinFormat
         | AppError::PinMismatch
         | AppError::PinAlreadySet

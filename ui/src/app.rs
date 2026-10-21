@@ -6,7 +6,9 @@ use crate::pages::{
     AccountDetailPage, AccountsPage, BudgetPage, DashboardPage, Gallery, NotFound, ProjectionPage,
     SettingsPage,
 };
-use crate::shell::{BottomNav, Header, Onboarding, OnboardingOverlay, SessionGate};
+use crate::shell::{
+    BottomNav, Header, Onboarding, OnboardingOverlay, SessionGate, UpdateWatcher, Updates,
+};
 use crate::state::{Privacy, Session, watch_visibility};
 
 /// Racine : contextes globaux, porte de session, coque et routes (une route par écran pour que
@@ -16,6 +18,7 @@ pub fn App() -> impl IntoView {
     Session::provide();
     Privacy::provide();
     Onboarding::provide();
+    Updates::provide();
     watch_visibility();
 
     view! {
@@ -34,6 +37,7 @@ pub fn App() -> impl IntoView {
                     </Routes>
                 </main>
                 <BottomNav />
+                <UpdateWatcher />
                 <OnboardingOverlay />
             </SessionGate>
         </Router>

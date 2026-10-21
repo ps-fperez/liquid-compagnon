@@ -11,13 +11,16 @@ use lc_application::ports::{Clock, PriceProvider};
 use lc_application::pricing::PricingService;
 use lc_application::projection::ProjectionUseCases;
 use lc_application::security::SecurityUseCases;
+use lc_application::updates::UpdateService;
 use lc_infrastructure::{
-    Argon2PinHasher, CoinGeckoProvider, Database, JsonBackupCodec, SqliteAccountRepository,
-    SqliteBudgetRepository, SqliteDatasetStore, SqlitePriceCache, SqliteSettingsStore,
-    SqliteSnapshotRepository, SystemClock, TwelveDataProvider, YahooFinanceProvider, http_client,
+    Argon2PinHasher, CoinGeckoProvider, Database, GithubReleaseFeed, HttpPackageDownloader,
+    JsonBackupCodec, SqliteAccountRepository, SqliteBudgetRepository, SqliteDatasetStore,
+    SqlitePriceCache, SqliteSettingsStore, SqliteSnapshotRepository, SystemClock,
+    TwelveDataProvider, YahooFinanceProvider, download_client, http_client,
 };
 
 use crate::session::Session;
+use crate::updater::{self, Updates};
 
 /// Nom du fichier de base, dans le répertoire privé de l'application.
 pub const DATABASE_FILE: &str = "liquid-compagnon.db";
@@ -30,6 +33,7 @@ pub struct Services {
     pub dashboard: DashboardUseCases,
     pub projection: ProjectionUseCases,
     pub backup: BackupUseCases,
+    pub updates: Updates,
 }
 
 impl Services {
@@ -52,7 +56,7 @@ impl Services {
                 settings.clone(),
                 clock.clone(),
             )),
-            Arc::new(YahooFinanceProvider::new(http, clock.clone())),
+            Arc::new(YahooFinanceProvider::new(http.clone(), clock.clone())),
         ];
         let pricing = Arc::new(PricingService::new(
             providers,
@@ -60,15 +64,31 @@ impl Services {
             clock.clone(),
         ));
 
+        let updates = Updates::new(UpdateService::new(
+            Box::new(GithubReleaseFeed::new(
+                http,
+                &format!("https://github.com/{}/releases", updater::REPOSITORY),
+            )),
+            Box::new(HttpPackageDownloader::new(download_client()?)),
+            updater::build_info(),
+            updater::REPOSITORY,
+        ));
+
         let services = Self {
             session: Session::default(),
+            updates,
             security: SecurityUseCases::new(
                 settings.clone(),
                 Arc::new(Argon2PinHasher),
                 clock.clone(),
             ),
-            budget: BudgetUseCases::new(budget.clone(), clock.clone()),
-            accounts: AccountUseCases::new(accounts.clone(), pricing.clone(), clock.clone()),
+            budget: BudgetUseCases::new(budget.clone(), accounts.clone(), clock.clone()),
+            accounts: AccountUseCases::new(
+                accounts.clone(),
+                budget.clone(),
+                pricing.clone(),
+                clock.clone(),
+            ),
             dashboard: DashboardUseCases::new(
                 accounts.clone(),
                 budget.clone(),

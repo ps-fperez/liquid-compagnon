@@ -1,6 +1,7 @@
 //! Comptes, positions, fonds PEI et recherche d'actifs.
 
 use lc_application::accounts::{AccountUpdate, FundInput, NewAccount};
+use lc_domain::account::AccountType;
 use lc_domain::{AccountId, FundId, Money};
 use lc_shared_dto::*;
 
@@ -99,15 +100,31 @@ pub async fn unarchive_account(state: AppState<'_>, input: IdInput) -> CommandRe
     .await
 }
 
+/// Comptes courants actifs, dans l'ordre de création : le premier est proposé par défaut pour
+/// les dépenses et revenus ponctuels. Sans valorisation (aucun appel réseau).
 #[tauri::command]
-pub async fn update_savings_balance(
-    state: AppState<'_>,
-    input: SavingsBalanceInput,
-) -> CommandResult<()> {
+pub async fn checking_accounts(state: AppState<'_>) -> CommandResult<Vec<AccountOptionDto>> {
+    blocking(unlocked(&state)?, |services| {
+        let accounts = services.accounts.list_accounts(false).map_err(app_error)?;
+        Ok(accounts
+            .iter()
+            .filter(|a| a.account_type() == AccountType::Checking)
+            .map(|a| AccountOptionDto {
+                id: a.id().to_string(),
+                name: a.name().to_string(),
+            })
+            .collect())
+    })
+    .await
+}
+
+/// Nouveau solde d'un livret ou d'un compte courant (qui devient sa référence).
+#[tauri::command]
+pub async fn update_balance(state: AppState<'_>, input: BalanceInput) -> CommandResult<()> {
     blocking(unlocked(&state)?, move |services| {
         services
             .accounts
-            .update_savings_balance(
+            .update_balance(
                 id(&input.account_id, AccountId::from_uuid)?,
                 Money::new(input.balance),
             )

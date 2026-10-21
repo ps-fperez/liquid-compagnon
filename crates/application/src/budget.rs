@@ -2,15 +2,16 @@
 
 use std::sync::Arc;
 
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate, Utc};
+use lc_domain::account::AccountType;
 use lc_domain::budget::{
     BudgetCalculator, Category, Expense, OneOffIncome, Periodicity, RecurringCharge, SalaryEntry,
 };
 use lc_domain::{
-    CategoryId, ChargeId, ExpenseId, IncomeId, Label, Money, Month, SalaryId, defaults,
+    AccountId, CategoryId, ChargeId, ExpenseId, IncomeId, Label, Money, Month, SalaryId, defaults,
 };
 
-use crate::ports::{BudgetRepository, Clock};
+use crate::ports::{AccountRepository, BudgetRepository, Clock};
 use crate::{AppError, AppResult};
 
 /// Synthèse budgétaire d'un mois.
@@ -62,6 +63,8 @@ pub struct ExpenseInput {
     /// Aujourd'hui si absent.
     pub date: Option<NaiveDate>,
     pub label: Option<String>,
+    /// Compte courant débité, le cas échéant.
+    pub account: Option<AccountId>,
 }
 
 pub(crate) fn summarize(repo: &dyn BudgetRepository, month: Month) -> AppResult<BudgetSummary> {
@@ -86,14 +89,24 @@ pub(crate) fn summarize(repo: &dyn BudgetRepository, month: Month) -> AppResult<
 
 pub struct BudgetUseCases {
     repo: Arc<dyn BudgetRepository>,
+    /// Comptes courants auxquels les mouvements peuvent être rattachés.
+    accounts: Arc<dyn AccountRepository>,
     clock: Arc<dyn Clock>,
 }
 
 impl BudgetUseCases {
     const SUGGESTION_LIMIT: usize = 30;
 
-    pub fn new(repo: Arc<dyn BudgetRepository>, clock: Arc<dyn Clock>) -> Self {
-        Self { repo, clock }
+    pub fn new(
+        repo: Arc<dyn BudgetRepository>,
+        accounts: Arc<dyn AccountRepository>,
+        clock: Arc<dyn Clock>,
+    ) -> Self {
+        Self {
+            repo,
+            accounts,
+            clock,
+        }
     }
 
     pub fn summary(&self, month: Option<Month>) -> AppResult<BudgetSummary> {
@@ -190,25 +203,38 @@ impl BudgetUseCases {
         Ok(salaries)
     }
 
+    /// Crée ou modifie un revenu ponctuel, éventuellement versé sur un compte courant.
     pub fn upsert_one_off_income(
         &self,
         id: Option<IncomeId>,
         label: &str,
         amount: Money,
         date: NaiveDate,
+        account: Option<AccountId>,
     ) -> AppResult<IncomeId> {
-        if let Some(id) = id {
-            self.require(
-                self.repo.one_off_incomes()?.iter().any(|i| i.id() == id),
-                "Revenu",
-            )?;
-        }
+        let existing = match id {
+            Some(id) => Some(
+                self.repo
+                    .one_off_incomes()?
+                    .into_iter()
+                    .find(|i| i.id() == id)
+                    .ok_or(AppError::NotFound("Revenu"))?,
+            ),
+            None => None,
+        };
+        self.require_checking_link(account, existing.as_ref().and_then(OneOffIncome::account))?;
+        let recorded_at = match &existing {
+            Some(income) => income.recorded_at(),
+            None => Some(self.clock.now()),
+        };
         let income = OneOffIncome::new(
             id.unwrap_or_else(IncomeId::generate),
             Label::new(label)?,
             amount,
             date,
-        )?;
+        )?
+        .linked_to(account)
+        .recorded(recorded_at);
         self.repo.save_one_off_income(&income)?;
         Ok(income.id())
     }
@@ -265,7 +291,8 @@ impl BudgetUseCases {
     /// Saisie rapide : montant + catégorie suffisent (date du jour par défaut).
     pub fn add_expense(&self, input: ExpenseInput) -> AppResult<ExpenseId> {
         self.require_usable_category(input.category, None)?;
-        self.save_expense(ExpenseId::generate(), input)
+        self.require_checking_link(input.account, None)?;
+        self.save_expense(ExpenseId::generate(), input, Some(self.clock.now()))
     }
 
     pub fn update_expense(&self, id: ExpenseId, input: ExpenseInput) -> AppResult<()> {
@@ -275,7 +302,11 @@ impl BudgetUseCases {
             .find(|e| e.id() == id)
             .ok_or(AppError::NotFound("Dépense"))?;
         self.require_usable_category(input.category, Some(existing.category()))?;
-        self.save_expense(id, input).map(|_| ())
+        self.require_checking_link(input.account, existing.account())?;
+        // L'instant de saisie d'origine est conservé : il situe la dépense par rapport au solde
+        // de référence du compte courant.
+        self.save_expense(id, input, existing.recorded_at())
+            .map(|_| ())
     }
 
     pub fn delete_expense(&self, id: ExpenseId) -> AppResult<()> {
@@ -334,7 +365,12 @@ impl BudgetUseCases {
         Month::of(self.clock.today())
     }
 
-    fn save_expense(&self, id: ExpenseId, input: ExpenseInput) -> AppResult<ExpenseId> {
+    fn save_expense(
+        &self,
+        id: ExpenseId,
+        input: ExpenseInput,
+        recorded_at: Option<DateTime<Utc>>,
+    ) -> AppResult<ExpenseId> {
         let label = input
             .label
             .as_deref()
@@ -343,9 +379,34 @@ impl BudgetUseCases {
             .map(Label::new)
             .transpose()?;
         let date = input.date.unwrap_or_else(|| self.clock.today());
-        let expense = Expense::new(id, input.amount, input.category, date, label)?;
+        let expense = Expense::new(id, input.amount, input.category, date, label)?
+            .linked_to(input.account)
+            .recorded(recorded_at);
         self.repo.save_expense(&expense)?;
         Ok(expense.id())
+    }
+
+    /// Un mouvement ne peut être rattaché qu'à un compte courant actif, sauf si le rattachement
+    /// est inchangé lors d'une modification (le compte a pu être clôturé depuis).
+    fn require_checking_link(
+        &self,
+        account: Option<AccountId>,
+        previous: Option<AccountId>,
+    ) -> AppResult<()> {
+        let Some(id) = account else {
+            return Ok(());
+        };
+        if previous == Some(id) {
+            return Ok(());
+        }
+        match self.accounts.get(id)? {
+            Some(account)
+                if account.account_type() == AccountType::Checking && !account.is_archived() =>
+            {
+                Ok(())
+            }
+            _ => Err(AppError::InvalidAccountLink),
+        }
     }
 
     /// La catégorie doit exister et être sélectionnable, sauf si elle est inchangée lors d'une
@@ -451,6 +512,7 @@ mod tests {
                     category,
                     date: NaiveDate::from_ymd_opt(2026, 10, day),
                     label: label.map(str::to_string),
+                    account: None,
                 })
                 .unwrap();
         };
@@ -499,6 +561,7 @@ mod tests {
                 category: food,
                 date: None,
                 label: None,
+                account: None,
             })
             .unwrap();
 
@@ -528,6 +591,7 @@ mod tests {
                     category,
                     date,
                     label: None,
+                    account: None,
                 })
                 .unwrap();
         }
@@ -553,6 +617,7 @@ mod tests {
                 category: leisure,
                 date: None,
                 label: Some("Cinéma".into()),
+                account: None,
             })
             .unwrap();
 
@@ -574,7 +639,8 @@ mod tests {
                 amount: Money::new(dec!(5)),
                 category: leisure,
                 date: None,
-                label: None
+                label: None,
+                account: None,
             }),
             Err(AppError::CategoryArchived)
         );
@@ -587,6 +653,7 @@ mod tests {
                     category: leisure,
                     date: None,
                     label: None,
+                    account: None,
                 },
             )
             .unwrap();
@@ -682,6 +749,7 @@ mod tests {
                     category: food,
                     date,
                     label: None,
+                    account: None,
                 })
                 .unwrap();
         }
@@ -699,7 +767,7 @@ mod tests {
         let budget = ready(&env);
         let december = NaiveDate::from_ymd_opt(2026, 12, 15).unwrap();
         budget
-            .upsert_one_off_income(None, "Prime", Money::new(dec!(1500)), december)
+            .upsert_one_off_income(None, "Prime", Money::new(dec!(1500)), december, None)
             .unwrap();
 
         assert_eq!(budget.one_off_incomes(month(2026, 12)).unwrap().len(), 1);

@@ -2,7 +2,7 @@
 
 use lc_shared_dto::{
     ApiKeyInput, ChangePinInput, ErrorDto, ImportInput, PingResponse, QuoteSourceDto, SettingsDto,
-    ToggleInput,
+    ToggleInput, UpdateStatusDto,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -12,7 +12,7 @@ use crate::components::style::{BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, SECTION_T
 use crate::components::{BottomSheet, Card, ErrorBanner, Field, Skeleton};
 use crate::files;
 use crate::format;
-use crate::shell::use_onboarding;
+use crate::shell::{AvailableUpdate, InstallControls, Updates, use_onboarding, use_updates};
 use crate::state::{session_locked, use_session};
 use crate::util::{load, run_action};
 
@@ -37,6 +37,7 @@ pub fn SettingsPage() -> impl IntoView {
             }
             .into_any(),
         }}
+        <UpdatesSection />
         <section class="flex flex-col gap-2">
             <h2 class=SECTION_TITLE>"Aide"</h2>
             <Card class="flex flex-col gap-3">
@@ -314,5 +315,78 @@ fn BackupSection(settings: SettingsDto, on_saved: Callback<()>) -> impl IntoView
                 <button class=BTN_DANGER disabled=move || busy.get() on:click=import>"Remplacer mes données"</button>
             </div>
         </BottomSheet>
+    }
+}
+
+/// Version installée, vérification manuelle, option automatique et installation (spec app-updates).
+#[component]
+fn UpdatesSection() -> impl IntoView {
+    let updates = use_updates();
+    let error = RwSignal::new(None::<String>);
+    let checking = RwSignal::new(false);
+    let automatic = RwSignal::new(Updates::auto_check_enabled());
+    // Affiche au moins la version installée (sans requête si la dernière date de moins de 6 h).
+    if updates.check.get_untracked().is_none() {
+        spawn_local(async move {
+            let _ = updates.check_now(true).await;
+        });
+    }
+    let check = move |_| {
+        checking.set(true);
+        error.set(None);
+        spawn_local(async move {
+            if let Err(message) = updates.check_now(false).await {
+                error.set(Some(message));
+            }
+            checking.set(false);
+        });
+    };
+
+    view! {
+        <section class="flex flex-col gap-2">
+            <h2 class=SECTION_TITLE>"Mises à jour"</h2>
+            <Card class="flex flex-col gap-3">
+                {move || updates.check.get().map(|check| {
+                    let current = check.current;
+                    let identity = match current.build {
+                        Some(build) => format!("Version {} · build {build}", current.version),
+                        None => format!("Version {} · build de développement", current.version),
+                    };
+                    let status = match check.status {
+                        UpdateStatusDto::UpToDate => Some("Application à jour".to_string()),
+                        UpdateStatusDto::Unsupported => Some("Build de développement : pas de mise à jour automatique.".to_string()),
+                        UpdateStatusDto::Available { .. } | UpdateStatusDto::NotChecked => None,
+                    };
+                    view! {
+                        <p class="text-sm">{identity}</p>
+                        {status.map(|text| view! { <p class="text-sm text-muted">{text}</p> })}
+                    }
+                })}
+                <Show when=move || updates.available_build().is_some()>
+                    <AvailableUpdate />
+                    <InstallControls />
+                </Show>
+                <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
+                <button class=BTN_SECONDARY disabled=move || checking.get() on:click=check>
+                    {move || if checking.get() { "Vérification…" } else { "Vérifier maintenant" }}
+                </button>
+                <label class="flex min-h-11 items-center justify-between gap-3">
+                    <span class="flex flex-col">
+                        <span class="text-sm">"Rechercher les mises à jour automatiquement"</span>
+                        <span class="text-xs text-muted">"Au déverrouillage, au plus toutes les 6 h : simple lecture sur github.com, aucune donnée envoyée."</span>
+                    </span>
+                    <input
+                        type="checkbox"
+                        class="size-5 shrink-0 accent-primary"
+                        prop:checked=move || automatic.get()
+                        on:change=move |event| {
+                            let enabled = event_target_checked(&event);
+                            automatic.set(enabled);
+                            Updates::set_auto_check(enabled);
+                        }
+                    />
+                </label>
+            </Card>
+        </section>
     }
 }

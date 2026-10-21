@@ -1,6 +1,6 @@
 use lc_shared_dto::{
-    BudgetSummaryDto, IdInput, NaiveDate, OneOffIncomeDto, OneOffIncomeInput, SalaryDto,
-    SalaryInput,
+    AccountOptionDto, BudgetSummaryDto, IdInput, NaiveDate, OneOffIncomeDto, OneOffIncomeInput,
+    SalaryDto, SalaryInput,
 };
 use leptos::prelude::*;
 
@@ -10,12 +10,15 @@ use crate::components::{Amount, BottomSheet, Card, EmptyState, Field};
 use crate::format;
 use crate::util::{Loaded, current_month, run_action, today};
 
+use super::account_choice::{AccountChoice, AccountSelection, resolve};
+
 /// Salaire (et son historique) et revenus ponctuels du mois.
 #[component]
 pub fn IncomesSection(
     summary: Loaded<BudgetSummaryDto>,
     salaries: Loaded<Vec<SalaryDto>>,
     incomes: Loaded<Vec<OneOffIncomeDto>>,
+    checking: Signal<Vec<AccountOptionDto>>,
     open_income: RwSignal<bool>,
     on_saved: Callback<()>,
 ) -> impl IntoView {
@@ -101,7 +104,7 @@ pub fn IncomesSection(
         </section>
 
         <SalarySheet open=new_salary existing=None on_saved=on_saved />
-        <IncomeSheet open=open_income existing=None on_saved=on_saved />
+        <IncomeSheet open=open_income checking=checking existing=None on_saved=on_saved />
         {move || editing_salary.get().map(|entry| {
             let open = RwSignal::new(true);
             Effect::new(move |_| if !open.get() { editing_salary.set(None) });
@@ -110,7 +113,7 @@ pub fn IncomesSection(
         {move || editing_income.get().map(|income| {
             let open = RwSignal::new(true);
             Effect::new(move |_| if !open.get() { editing_income.set(None) });
-            view! { <IncomeSheet open=open existing=Some(income) on_saved=on_saved /> }
+            view! { <IncomeSheet open=open checking=checking existing=Some(income) on_saved=on_saved /> }
         })}
     }
 }
@@ -175,10 +178,12 @@ fn SalarySheet(
 #[component]
 fn IncomeSheet(
     open: RwSignal<bool>,
+    checking: Signal<Vec<AccountOptionDto>>,
     existing: Option<OneOffIncomeDto>,
     on_saved: Callback<()>,
 ) -> impl IntoView {
     let editing = existing.is_some();
+    let account: AccountSelection = RwSignal::new(existing.as_ref().map(|i| i.account_id.clone()));
     let label = RwSignal::new(
         existing
             .as_ref()
@@ -214,6 +219,7 @@ fn IncomeSheet(
             label: label.get_untracked(),
             amount: parsed_amount,
             date,
+            account_id: resolve(account.get_untracked(), &checking.get_untracked()),
         };
         run_action(
             busy,
@@ -223,6 +229,7 @@ fn IncomeSheet(
                 if !editing {
                     label.set(String::new());
                     amount.set(String::new());
+                    account.set(None);
                 }
                 open.set(false);
                 on_saved.run(());
@@ -247,6 +254,7 @@ fn IncomeSheet(
                 <Field label="Libellé" value=label placeholder="Prime de fin d'année" />
                 <Field label="Montant" value=amount input_mode="decimal" suffix="€" />
                 <Field label="Date" value=date input_type="date" />
+                <AccountChoice label="Versé sur" options=checking selection=account />
                 <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
                 <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit>"Enregistrer"</button>
                 {editing.then(|| view! { <button class=BTN_DANGER disabled=move || busy.get() on:click=remove>"Supprimer"</button> })}

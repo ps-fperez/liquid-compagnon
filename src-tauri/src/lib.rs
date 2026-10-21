@@ -9,6 +9,7 @@ mod error;
 mod mapping;
 mod session;
 mod state;
+mod updater;
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -24,7 +25,8 @@ pub const SESSION_LOCKED_EVENT: &str = "session-locked";
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_fs::init());
+        .plugin(tauri_plugin_fs::init())
+        .plugin(updater::plugin());
     #[cfg(mobile)]
     let builder = builder.plugin(tauri_plugin_biometric::init());
 
@@ -89,7 +91,11 @@ pub fn run() {
             commands::accounts::update_account,
             commands::accounts::archive_account,
             commands::accounts::unarchive_account,
-            commands::accounts::update_savings_balance,
+            commands::accounts::update_balance,
+            commands::accounts::checking_accounts,
+            // Mises à jour
+            commands::updates::check_for_update,
+            commands::updates::install_update,
             commands::accounts::set_savings_terms,
             commands::accounts::set_scenario_rates,
             commands::accounts::set_cash,

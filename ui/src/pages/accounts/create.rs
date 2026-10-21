@@ -16,6 +16,7 @@ pub fn default_color(account_type: AccountTypeDto) -> &'static str {
         AccountTypeDto::Pea => "#3B82F6",
         AccountTypeDto::Pei => "#60A5FA",
         AccountTypeDto::Crypto => "#7C3AED",
+        AccountTypeDto::Checking => "#22D3EE",
     }
 }
 

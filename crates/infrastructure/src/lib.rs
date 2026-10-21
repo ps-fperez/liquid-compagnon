@@ -5,6 +5,7 @@ mod clock;
 mod pricing;
 mod security;
 mod sqlite;
+mod updates;
 
 pub use backup::JsonBackupCodec;
 pub use clock::SystemClock;
@@ -14,3 +15,4 @@ pub use sqlite::{
     Database, SqliteAccountRepository, SqliteBudgetRepository, SqliteDatasetStore,
     SqlitePriceCache, SqliteSettingsStore, SqliteSnapshotRepository,
 };
+pub use updates::{GithubReleaseFeed, HttpPackageDownloader, download_client};

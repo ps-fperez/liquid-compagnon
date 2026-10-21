@@ -54,7 +54,7 @@ pub fn AccountsPage() -> impl IntoView {
             Some(Ok(list)) if list.accounts.is_empty() => view! {
                 <EmptyState
                     title="Ajoutez votre premier compte"
-                    body="Livret A, LDDS, PEA, PEI ou portefeuille crypto."
+                    body="Compte courant, Livret A, LDDS, PEA, PEI ou portefeuille crypto."
                     action="Ajouter un compte"
                     on_action=Callback::new(move |_| create_open.set(true))
                 />
@@ -64,7 +64,7 @@ pub fn AccountsPage() -> impl IntoView {
                 let savings: Vec<AccountDto> = list
                     .accounts
                     .iter()
-                    .filter(|a| !a.archived && matches!(a.details, AccountDetailsDto::Savings { .. }))
+                    .filter(|a| !a.archived && matches!(a.details, AccountDetailsDto::Savings { .. } | AccountDetailsDto::Checking { .. }))
                     .cloned()
                     .collect();
                 view! {

@@ -1,6 +1,6 @@
 use chrono::NaiveDate;
 
-use super::{PeiFund, Position};
+use super::{CheckingDetails, PeiFund, Position};
 use crate::{DomainError, Money, Rate};
 
 /// Type de compte, tel que choisi par l'utilisateur à la création.
@@ -11,10 +11,12 @@ pub enum AccountType {
     Pea,
     Pei,
     Crypto,
+    Checking,
 }
 
 impl AccountType {
-    pub const ALL: [AccountType; 5] = [
+    pub const ALL: [AccountType; 6] = [
+        AccountType::Checking,
         AccountType::LivretA,
         AccountType::Ldds,
         AccountType::Pea,
@@ -29,6 +31,7 @@ impl AccountType {
             AccountType::Pea => "PEA",
             AccountType::Pei => "PEI",
             AccountType::Crypto => "Portefeuille crypto",
+            AccountType::Checking => "Compte courant",
         }
     }
 }
@@ -194,6 +197,7 @@ pub enum AccountKind {
     Savings(SavingsDetails),
     Securities(SecuritiesDetails),
     EmployeeSavings(EmployeeSavingsDetails),
+    Checking(CheckingDetails),
 }
 
 impl AccountKind {
@@ -208,6 +212,7 @@ impl AccountKind {
                 SecuritiesProduct::Crypto => AccountType::Crypto,
             },
             AccountKind::EmployeeSavings(_) => AccountType::Pei,
+            AccountKind::Checking(_) => AccountType::Checking,
         }
     }
 }

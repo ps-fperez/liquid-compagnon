@@ -9,7 +9,7 @@ use lc_domain::{Money, Month};
 use crate::AppResult;
 use crate::budget::summarize;
 use crate::ports::{AccountRepository, BudgetRepository, Clock};
-use crate::pricing::{PricingIssue, PricingService, value_active_accounts};
+use crate::pricing::{PricingIssue, PricingService, checking_ledger, value_active_accounts};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectionReport {
@@ -57,8 +57,13 @@ impl ProjectionUseCases {
     }
 
     pub async fn projection(&self) -> AppResult<ProjectionReport> {
-        let (valued, pricing_issues) =
-            value_active_accounts(self.accounts.list()?, &self.pricing, false).await?;
+        let (valued, pricing_issues) = value_active_accounts(
+            self.accounts.list()?,
+            &self.pricing,
+            &checking_ledger(self.budget.as_ref())?,
+            false,
+        )
+        .await?;
         let budget = summarize(self.budget.as_ref(), Month::of(self.clock.today()))?;
         let input = ProjectionInput::from_accounts(
             valued

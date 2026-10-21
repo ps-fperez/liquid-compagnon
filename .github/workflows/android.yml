@@ -85,18 +85,49 @@ jobs:
             echo "BUILD_KIND=debug" >> "$GITHUB_ENV"
           fi
 
+      # Identité du build, compilée dans l'app : elle compare son numéro à latest.json pour proposer
+      # les mises à jour. Le versionCode croît à chaque run : un APK récent s'installe par-dessus.
       - name: Build APK
         run: |
           export NDK_HOME="$ANDROID_NDK_LATEST_HOME"
-          if [ "$BUILD_KIND" = "release" ]; then
-            cargo tauri android build --apk --target aarch64
+          export LC_BUILD_NUMBER="$GITHUB_RUN_NUMBER"
+          export LC_COMMIT="${GITHUB_SHA::7}"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            export LC_UPDATE_CHANNEL=stable
           else
-            cargo tauri android build --apk --debug --target aarch64
+            export LC_UPDATE_CHANNEL=dernier-build
+          fi
+          echo "LC_UPDATE_CHANNEL=$LC_UPDATE_CHANNEL" >> "$GITHUB_ENV"
+          CONFIG="{\"bundle\":{\"android\":{\"versionCode\":$((100000 + GITHUB_RUN_NUMBER))}}}"
+          if [ "$BUILD_KIND" = "release" ]; then
+            cargo tauri android build --apk --target aarch64 --config "$CONFIG"
+          else
+            cargo tauri android build --apk --debug --target aarch64 --config "$CONFIG"
           fi
           APK=$(find src-tauri/gen/android/app/build/outputs/apk -name '*.apk' | head -n 1)
           OUT="liquid-compagnon-${GITHUB_REF_NAME//\//-}-${GITHUB_SHA::7}-${BUILD_KIND}.apk"
           cp "$APK" "$OUT"
           echo "APK_FILE=$OUT" >> "$GITHUB_ENV"
+
+      # Annonce de version lue par l'application (src-tauri/src/updater.rs) : numéro de build,
+      # URL, taille et empreinte SHA-256 de l'APK publié avec elle.
+      - name: Manifeste latest.json
+        run: |
+          if [ "$LC_UPDATE_CHANNEL" = "stable" ]; then TAG="$GITHUB_REF_NAME"; else TAG=dernier-build; fi
+          jq -n \
+            --argjson build "$GITHUB_RUN_NUMBER" \
+            --arg version "$(jq -r .version src-tauri/tauri.conf.json)" \
+            --arg commit "${GITHUB_SHA::7}" \
+            --arg channel "$LC_UPDATE_CHANNEL" \
+            --arg url "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$APK_FILE" \
+            --argjson size "$(stat -c %s "$APK_FILE")" \
+            --arg sha256 "$(sha256sum "$APK_FILE" | cut -d' ' -f1)" \
+            --arg notes "$(git log -1 --pretty=%s)" \
+            --arg published_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{build: $build, version: $version, commit: $commit, channel: $channel, url: $url,
+              size: $size, sha256: $sha256, notes: $notes, published_at: $published_at}' \
+            > latest.json
+          cat latest.json
 
       - uses: actions/upload-artifact@v7
         with:
@@ -111,7 +142,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete dernier-build --cleanup-tag --yes || true
-          gh release create dernier-build "$APK_FILE" \
+          gh release create dernier-build "$APK_FILE" latest.json \
             --prerelease \
             --target "$GITHUB_SHA" \
             --title "Dernier build (${GITHUB_SHA::7})" \
@@ -122,6 +153,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "$APK_FILE" \
+          gh release create "$GITHUB_REF_NAME" "$APK_FILE" latest.json \
             --title "Liquid Compagnon $GITHUB_REF_NAME" \
             --generate-notes

@@ -2,10 +2,10 @@ use lc_application::ports::{BudgetRepository, StorageResult};
 use lc_domain::budget::{
     Category, Expense, OneOffIncome, Periodicity, RecurringCharge, SalaryEntry,
 };
-use lc_domain::{CategoryId, ChargeId, ExpenseId, IncomeId, Label, SalaryId};
+use lc_domain::{AccountId, CategoryId, ChargeId, ExpenseId, IncomeId, Label, SalaryId};
 use rusqlite::{Connection, Params, Row, params};
 
-use super::{Database, SqlResultExt, corrupt, date, domain, money, month, uuid};
+use super::{Database, SqlResultExt, corrupt, date, datetime, domain, money, month, uuid};
 
 pub struct SqliteBudgetRepository {
     db: Database,
@@ -108,23 +108,32 @@ impl BudgetRepository for SqliteBudgetRepository {
         self.db.read(|conn| {
             load(
                 conn,
-                "SELECT id, label, amount, date FROM one_off_incomes ORDER BY rowid",
+                "SELECT id, label, amount, date, account_id, recorded_at FROM one_off_incomes
+                 ORDER BY rowid",
                 [],
                 |row| {
                     Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, String>(2)?,
-                        row.get::<_, String>(3)?,
+                        (
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, String>(2)?,
+                            row.get::<_, String>(3)?,
+                        ),
+                        (
+                            row.get::<_, Option<String>>(4)?,
+                            row.get::<_, Option<String>>(5)?,
+                        ),
                     ))
                 },
-                |(id, label, amount, on)| {
-                    domain(OneOffIncome::new(
+                |((id, label, amount, on), (account, recorded_at))| {
+                    Ok(domain(OneOffIncome::new(
                         IncomeId::from_uuid(uuid(&id)?),
                         domain(Label::new(&label))?,
                         money(&amount)?,
                         date(&on)?,
-                    ))
+                    ))?
+                    .linked_to(optional_account(account)?)
+                    .recorded(recorded_at.as_deref().map(datetime).transpose()?))
                 },
             )
         })
@@ -186,19 +195,26 @@ impl BudgetRepository for SqliteBudgetRepository {
         self.db.read(|conn| {
             load(
                 conn,
-                "SELECT id, amount, category_id, date, label FROM expenses ORDER BY date, rowid",
+                "SELECT id, amount, category_id, date, label, account_id, recorded_at FROM expenses
+                 ORDER BY date, rowid",
                 [],
                 |row| {
                     Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, String>(2)?,
-                        row.get::<_, String>(3)?,
-                        row.get::<_, Option<String>>(4)?,
+                        (
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, String>(2)?,
+                            row.get::<_, String>(3)?,
+                            row.get::<_, Option<String>>(4)?,
+                        ),
+                        (
+                            row.get::<_, Option<String>>(5)?,
+                            row.get::<_, Option<String>>(6)?,
+                        ),
                     ))
                 },
-                |(id, amount, category, on, label)| {
-                    domain(Expense::new(
+                |((id, amount, category, on, label), (account, recorded_at))| {
+                    Ok(domain(Expense::new(
                         ExpenseId::from_uuid(uuid(&id)?),
                         money(&amount)?,
                         CategoryId::from_uuid(uuid(&category)?),
@@ -208,7 +224,9 @@ impl BudgetRepository for SqliteBudgetRepository {
                             .map(Label::new)
                             .transpose()
                             .map_err(corrupt)?,
-                    ))
+                    ))?
+                    .linked_to(optional_account(account)?)
+                    .recorded(recorded_at.as_deref().map(datetime).transpose()?))
                 },
             )
         })
@@ -256,14 +274,18 @@ pub(crate) fn save_salary(conn: &Connection, salary: &SalaryEntry) -> StorageRes
 
 pub(crate) fn save_one_off_income(conn: &Connection, income: &OneOffIncome) -> StorageResult<()> {
     conn.execute(
-        "INSERT INTO one_off_incomes (id, label, amount, date) VALUES (?1, ?2, ?3, ?4)
+        "INSERT INTO one_off_incomes (id, label, amount, date, account_id, recorded_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
          ON CONFLICT(id) DO UPDATE SET label = excluded.label, amount = excluded.amount,
-             date = excluded.date",
+             date = excluded.date, account_id = excluded.account_id,
+             recorded_at = excluded.recorded_at",
         params![
             income.id().to_string(),
             income.label().as_str(),
             income.amount().amount().to_string(),
-            income.date().to_string()
+            income.date().to_string(),
+            income.account().map(|a| a.to_string()),
+            income.recorded_at().map(|at| at.to_rfc3339()),
         ],
     )
     .db()
@@ -294,19 +316,29 @@ pub(crate) fn save_charge(conn: &Connection, charge: &RecurringCharge) -> Storag
 
 pub(crate) fn save_expense(conn: &Connection, expense: &Expense) -> StorageResult<()> {
     conn.execute(
-        "INSERT INTO expenses (id, amount, category_id, date, label) VALUES (?1, ?2, ?3, ?4, ?5)
+        "INSERT INTO expenses (id, amount, category_id, date, label, account_id, recorded_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
          ON CONFLICT(id) DO UPDATE SET amount = excluded.amount,
-             category_id = excluded.category_id, date = excluded.date, label = excluded.label",
+             category_id = excluded.category_id, date = excluded.date, label = excluded.label,
+             account_id = excluded.account_id, recorded_at = excluded.recorded_at",
         params![
             expense.id().to_string(),
             expense.amount().amount().to_string(),
             expense.category().to_string(),
             expense.date().to_string(),
             expense.label().map(Label::as_str),
+            expense.account().map(|a| a.to_string()),
+            expense.recorded_at().map(|at| at.to_rfc3339()),
         ],
     )
     .db()
     .map(drop)
+}
+
+fn optional_account(raw: Option<String>) -> StorageResult<Option<AccountId>> {
+    raw.as_deref()
+        .map(|id| uuid(id).map(AccountId::from_uuid))
+        .transpose()
 }
 
 fn periodicity_to_sql(periodicity: Periodicity) -> &'static str {

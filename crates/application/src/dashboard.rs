@@ -11,7 +11,7 @@ use lc_domain::{
 use crate::AppResult;
 use crate::budget::{BudgetSummary, summarize};
 use crate::ports::{AccountRepository, BudgetRepository, Clock, SnapshotRepository};
-use crate::pricing::{PricingIssue, PricingService, value_active_accounts};
+use crate::pricing::{PricingIssue, PricingService, checking_ledger, value_active_accounts};
 
 /// Variation par rapport au dernier snapshot automatique.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,8 +90,13 @@ impl DashboardUseCases {
     /// Construit le tableau de bord. Prend au passage le snapshot automatique du mois s'il
     /// n'existe pas encore (première ouverture du mois).
     pub async fn dashboard(&self, force_refresh: bool) -> AppResult<Dashboard> {
-        let (valued, pricing_issues) =
-            value_active_accounts(self.accounts.list()?, &self.pricing, force_refresh).await?;
+        let (valued, pricing_issues) = value_active_accounts(
+            self.accounts.list()?,
+            &self.pricing,
+            &checking_ledger(self.budget.as_ref())?,
+            force_refresh,
+        )
+        .await?;
         let mut snapshots = self.snapshots.list()?;
         let today = self.clock.today();
 
@@ -134,8 +139,13 @@ impl DashboardUseCases {
 
     /// Snapshot demandé par l'utilisateur.
     pub async fn take_manual_snapshot(&self) -> AppResult<Snapshot> {
-        let (valued, _) =
-            value_active_accounts(self.accounts.list()?, &self.pricing, false).await?;
+        let (valued, _) = value_active_accounts(
+            self.accounts.list()?,
+            &self.pricing,
+            &checking_ledger(self.budget.as_ref())?,
+            false,
+        )
+        .await?;
         let snapshot = capture(&valued, SnapshotKind::Manual, self.clock.today());
         self.snapshots.save(&snapshot)?;
         Ok(snapshot)
@@ -208,7 +218,7 @@ mod tests {
     fn livret(env: &TestEnv, name: &str, account_type: AccountType, balance: Decimal) -> AccountId {
         let id = open(env, name, account_type);
         env.accounts()
-            .update_savings_balance(id, Money::new(balance))
+            .update_balance(id, Money::new(balance))
             .unwrap();
         id
     }
@@ -277,7 +287,7 @@ mod tests {
 
         env.clock.advance(Duration::days(5));
         env.accounts()
-            .update_savings_balance(id, Money::new(dec!(48362)))
+            .update_balance(id, Money::new(dec!(48362)))
             .unwrap();
         let after = block_on(dashboard.dashboard(false)).unwrap();
 
@@ -301,7 +311,7 @@ mod tests {
         env.clock
             .set_date(NaiveDate::from_ymd_opt(2026, 11, 3).unwrap());
         env.accounts()
-            .update_savings_balance(id, Money::new(dec!(1100)))
+            .update_balance(id, Money::new(dec!(1100)))
             .unwrap();
         block_on(dashboard.dashboard(false)).unwrap(); // novembre
         block_on(dashboard.take_manual_snapshot()).unwrap();

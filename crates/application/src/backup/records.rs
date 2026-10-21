@@ -1,4 +1,4 @@
-//! Format d'échange de la sauvegarde (version 1) et conversion depuis/vers le domaine.
+//! Format d'échange de la sauvegarde (version 2 : compte courant et rattachement des mouvements) et conversion depuis/vers le domaine.
 //!
 //! Les montants et taux sont sérialisés en chaînes décimales exactes, les dates en ISO 8601.
 //! La conversion vers le domaine repasse par les constructeurs du domaine : toutes les règles
@@ -8,9 +8,9 @@ use std::collections::HashSet;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use lc_domain::account::{
-    Account, AccountKind, AssetRef, CurrencyCode, EmployeeSavingsDetails, NavAnchor, PeiFund,
-    Position, QuoteSource, SavingsDetails, SavingsProduct, ScenarioRates, SecuritiesDetails,
-    SecuritiesProduct,
+    Account, AccountKind, AccountType, AssetRef, CheckingDetails, CurrencyCode,
+    EmployeeSavingsDetails, NavAnchor, PeiFund, Position, QuoteSource, SavingsDetails,
+    SavingsProduct, ScenarioRates, SecuritiesDetails, SecuritiesProduct,
 };
 use lc_domain::budget::{
     Category, Expense, OneOffIncome, Periodicity, RecurringCharge, SalaryEntry,
@@ -60,6 +60,11 @@ pub struct OneOffIncomeRecord {
     pub label: String,
     pub amount: Decimal,
     pub date: NaiveDate,
+    /// Compte courant crédité (absent en version 1).
+    #[serde(default)]
+    pub account_id: Option<Uuid>,
+    #[serde(default)]
+    pub recorded_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -88,6 +93,11 @@ pub struct ExpenseRecord {
     pub category_id: Uuid,
     pub date: NaiveDate,
     pub label: Option<String>,
+    /// Compte courant débité (absent en version 1).
+    #[serde(default)]
+    pub account_id: Option<Uuid>,
+    #[serde(default)]
+    pub recorded_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -163,6 +173,11 @@ pub enum AccountKindRecord {
     EmployeeSavings {
         funds: Vec<FundRecord>,
     },
+    Checking {
+        reference_balance: Decimal,
+        reference_on: NaiveDate,
+        reference_at: DateTime<Utc>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -231,6 +246,8 @@ impl FullDataset {
                     label: i.label().to_string(),
                     amount: i.amount().amount(),
                     date: i.date(),
+                    account_id: i.account().map(|a| *a.as_uuid()),
+                    recorded_at: i.recorded_at(),
                 })
                 .collect(),
             charges: data
@@ -259,6 +276,8 @@ impl FullDataset {
                     category_id: *e.category().as_uuid(),
                     date: e.date(),
                     label: e.label().map(|l| l.to_string()),
+                    account_id: e.account().map(|a| *a.as_uuid()),
+                    recorded_at: e.recorded_at(),
                 })
                 .collect(),
             accounts: data.accounts.iter().map(account_record).collect(),
@@ -342,6 +361,11 @@ fn account_record(account: &Account) -> AccountRecord {
                     })
                     .collect(),
             },
+            AccountKind::Checking(d) => AccountKindRecord::Checking {
+                reference_balance: d.reference_balance().amount(),
+                reference_on: d.reference_on(),
+                reference_at: d.reference_at(),
+            },
         },
     }
 }
@@ -410,6 +434,11 @@ impl FullDataset {
                     Money::new(r.amount),
                     r.date,
                 )
+                .map(|income| {
+                    income
+                        .linked_to(r.account_id.map(AccountId::from_uuid))
+                        .recorded(r.recorded_at)
+                })
             })
             .collect::<Result<Vec<_>, DomainError>>()
             .map_err(context("revenu ponctuel"))?;
@@ -436,7 +465,9 @@ impl FullDataset {
                 r.date,
                 label,
             )
-            .map_err(context("dépense"))?;
+            .map_err(context("dépense"))?
+            .linked_to(r.account_id.map(AccountId::from_uuid))
+            .recorded(r.recorded_at);
             expenses.push(expense);
         }
 
@@ -447,6 +478,18 @@ impl FullDataset {
             .collect::<Result<Vec<_>, DomainError>>()
             .map_err(context("compte"))?;
         let account_ids: HashSet<AccountId> = accounts.iter().map(Account::id).collect();
+        let checking_ids: HashSet<AccountId> = accounts
+            .iter()
+            .filter(|a| a.account_type() == AccountType::Checking)
+            .map(Account::id)
+            .collect();
+        let mut linked = expenses
+            .iter()
+            .filter_map(Expense::account)
+            .chain(one_off_incomes.iter().filter_map(OneOffIncome::account));
+        if linked.any(|id| !checking_ids.contains(&id)) {
+            return Err(invalid("mouvement rattaché à un compte courant inconnu"));
+        }
 
         let mut snapshots = Vec::with_capacity(self.snapshots.len());
         for r in self.snapshots {
@@ -565,6 +608,15 @@ fn account_from_record(r: AccountRecord) -> Result<Account, DomainError> {
                     .collect::<Result<_, _>>()?,
             ))
         }
+        AccountKindRecord::Checking {
+            reference_balance,
+            reference_on,
+            reference_at,
+        } => AccountKind::Checking(CheckingDetails::new(
+            Money::new(reference_balance),
+            reference_on,
+            reference_at,
+        )?),
     };
     let mut account = Account::restore(
         AccountId::from_uuid(r.id),

@@ -36,6 +36,8 @@ pub enum AppError {
     CategoryInUse,
     #[error("Aucune source de cotation configurée pour cet actif")]
     NoPriceProvider,
+    #[error("Seul un compte courant actif peut être choisi pour ce mouvement")]
+    InvalidAccountLink,
     #[error("Cours indisponibles : {0}")]
     Pricing(#[from] PriceError),
     #[error("Fichier invalide : {0}")]

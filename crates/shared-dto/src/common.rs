@@ -10,10 +10,12 @@ pub enum AccountTypeDto {
     Pea,
     Pei,
     Crypto,
+    Checking,
 }
 
 impl AccountTypeDto {
-    pub const ALL: [AccountTypeDto; 5] = [
+    pub const ALL: [AccountTypeDto; 6] = [
+        AccountTypeDto::Checking,
         AccountTypeDto::LivretA,
         AccountTypeDto::Ldds,
         AccountTypeDto::Pea,
@@ -28,6 +30,7 @@ impl AccountTypeDto {
             AccountTypeDto::Pea => "PEA",
             AccountTypeDto::Pei => "PEI",
             AccountTypeDto::Crypto => "Portefeuille crypto",
+            AccountTypeDto::Checking => "Compte courant",
         }
     }
 }

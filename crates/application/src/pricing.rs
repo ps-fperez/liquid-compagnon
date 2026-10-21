@@ -3,10 +3,10 @@
 use std::sync::Arc;
 
 use chrono::Duration;
-use lc_domain::account::{Account, AccountKind, AssetRef, QuoteSource};
+use lc_domain::account::{Account, AccountKind, AssetRef, CheckingLedger, QuoteSource};
 use lc_domain::valuation::{AccountValuation, PriceBook, QuoteFreshness, value_account};
 
-use crate::ports::{Clock, PriceCache, PriceError, PriceProvider};
+use crate::ports::{BudgetRepository, Clock, PriceCache, PriceError, PriceProvider};
 use crate::{AppError, AppResult};
 
 /// Problème rencontré lors d'un rafraîchissement : les valeurs restent affichées (cache ou prix
@@ -163,7 +163,7 @@ pub fn tracked_assets(accounts: &[Account]) -> Vec<AssetRef> {
     let mut assets: Vec<AssetRef> = Vec::new();
     for account in accounts.iter().filter(|a| !a.is_archived()) {
         let candidates: Vec<&AssetRef> = match account.kind() {
-            AccountKind::Savings(_) => Vec::new(),
+            AccountKind::Savings(_) | AccountKind::Checking(_) => Vec::new(),
             AccountKind::Securities(details) => {
                 details.positions().iter().map(|p| p.asset()).collect()
             }
@@ -186,6 +186,7 @@ pub fn tracked_assets(accounts: &[Account]) -> Vec<AssetRef> {
 pub(crate) async fn value_active_accounts(
     accounts: Vec<Account>,
     pricing: &PricingService,
+    ledger: &CheckingLedger,
     force_refresh: bool,
 ) -> AppResult<(Vec<(Account, AccountValuation)>, Vec<PricingIssue>)> {
     let active: Vec<Account> = accounts.into_iter().filter(|a| !a.is_archived()).collect();
@@ -195,11 +196,19 @@ pub(crate) async fn value_active_accounts(
     let valued = active
         .into_iter()
         .map(|account| {
-            let valuation = value_account(&account, &refresh.prices);
+            let valuation = value_account(&account, &refresh.prices, ledger);
             (account, valuation)
         })
         .collect();
     Ok((valued, refresh.issues))
+}
+
+/// Dépenses et revenus ponctuels rattachés aux comptes courants.
+pub(crate) fn checking_ledger(budget: &dyn BudgetRepository) -> AppResult<CheckingLedger> {
+    Ok(CheckingLedger::from_budget(
+        &budget.expenses()?,
+        &budget.one_off_incomes()?,
+    ))
 }
 
 #[cfg(test)]

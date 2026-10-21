@@ -181,7 +181,7 @@ fn Overview(
                 view! {
                     <EmptyState
                         title="Ajoutez votre premier compte"
-                        body="Livret A, LDDS, PEA, PEI ou portefeuille crypto."
+                        body="Compte courant, Livret A, LDDS, PEA, PEI ou portefeuille crypto."
                         action="Ajouter un compte"
                         href="/comptes?nouveau=1"
                     />

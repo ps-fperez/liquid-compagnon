@@ -3,12 +3,14 @@ use leptos_router::components::A;
 
 use crate::components::style::BTN_ICON;
 use crate::icons::{Icon, IconName};
+use crate::shell::use_updates;
 use crate::state::use_privacy;
 
 /// En-tête : nom de l'application, mode discret, accès aux réglages.
 #[component]
 pub fn Header() -> impl IntoView {
     let privacy = use_privacy();
+    let updates = use_updates();
     view! {
         <header class="sticky top-0 z-20 flex items-center justify-between bg-bg/90 px-4 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-2 backdrop-blur">
             <A href="/" attr:class="flex items-center gap-2.5">
@@ -29,8 +31,12 @@ pub fn Header() -> impl IntoView {
                         view! { <Icon name=name /> }
                     }}
                 </button>
-                <A href="/reglages" attr:class=BTN_ICON attr:aria-label="Réglages">
+                <A href="/reglages" attr:class=format!("{BTN_ICON} relative") attr:aria-label="Réglages">
                     <Icon name=IconName::Settings />
+                    // Pastille : une mise à jour attend dans les réglages.
+                    {move || updates.available_build().map(|_| view! {
+                        <span class="absolute top-2 right-2 size-2.5 rounded-full bg-secondary shadow-glow-secondary" aria-label="Mise à jour disponible"></span>
+                    })}
                 </A>
             </div>
         </header>

@@ -1,8 +1,9 @@
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate, Utc};
 
 use super::{
-    AccountKind, AccountType, AssetRef, EmployeeSavingsDetails, NavAnchor, PeiFund, Position,
-    SavingsDetails, SavingsProduct, ScenarioRates, SecuritiesDetails, SecuritiesProduct,
+    AccountKind, AccountType, AssetRef, CheckingDetails, EmployeeSavingsDetails, NavAnchor,
+    PeiFund, Position, SavingsDetails, SavingsProduct, ScenarioRates, SecuritiesDetails,
+    SecuritiesProduct,
 };
 use crate::{AccountId, Color, DomainError, FundId, Label, Money, Rate, defaults};
 
@@ -35,6 +36,15 @@ impl Account {
             AccountType::Pea => empty_securities(SecuritiesProduct::Pea),
             AccountType::Crypto => empty_securities(SecuritiesProduct::Crypto),
             AccountType::Pei => AccountKind::EmployeeSavings(EmployeeSavingsDetails::default()),
+            // Solde nul au début du jour d'ouverture, en attendant le premier solde saisi.
+            AccountType::Checking => AccountKind::Checking(
+                CheckingDetails::new(
+                    Money::ZERO,
+                    today,
+                    today.and_time(chrono::NaiveTime::MIN).and_utc(),
+                )
+                .expect("un solde nul est valide"),
+            ),
         };
         let savings_rate = match &kind {
             AccountKind::Savings(details) => Some(details.rate()),
@@ -152,6 +162,22 @@ impl Account {
             self.scenario_rates = ScenarioRates::uniform(rate);
         }
         Ok(())
+    }
+
+    // --- Compte courant -------------------------------------------------------------------
+
+    /// Nouveau solde de référence d'un compte courant : les mouvements déjà saisis sont réputés
+    /// inclus dans ce solde.
+    pub fn update_checking_balance(
+        &mut self,
+        balance: Money,
+        on: NaiveDate,
+        at: DateTime<Utc>,
+    ) -> Result<(), DomainError> {
+        match &mut self.kind {
+            AccountKind::Checking(details) => details.reset(balance, on, at),
+            _ => Err(DomainError::WrongAccountKind),
+        }
     }
 
     // --- PEA / crypto ----------------------------------------------------------------------

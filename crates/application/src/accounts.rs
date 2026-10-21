@@ -10,8 +10,8 @@ use lc_domain::{AccountId, Color, Decimal, DomainError, FundId, Label, Money, Ra
 
 use lc_domain::valuation::{AccountValuation, value_account};
 
-use crate::ports::{AccountRepository, Clock};
-use crate::pricing::{PricingIssue, PricingService, tracked_assets};
+use crate::ports::{AccountRepository, BudgetRepository, Clock};
+use crate::pricing::{PricingIssue, PricingService, checking_ledger, tracked_assets};
 use crate::{AppError, AppResult};
 
 /// Comptes et leur valorisation, avec les éventuels problèmes de cours.
@@ -56,6 +56,8 @@ pub struct FundInput {
 
 pub struct AccountUseCases {
     repo: Arc<dyn AccountRepository>,
+    /// Mouvements rattachés aux comptes courants.
+    budget: Arc<dyn BudgetRepository>,
     pricing: Arc<PricingService>,
     clock: Arc<dyn Clock>,
 }
@@ -63,11 +65,13 @@ pub struct AccountUseCases {
 impl AccountUseCases {
     pub fn new(
         repo: Arc<dyn AccountRepository>,
+        budget: Arc<dyn BudgetRepository>,
         pricing: Arc<PricingService>,
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
             repo,
+            budget,
             pricing,
             clock,
         }
@@ -90,11 +94,12 @@ impl AccountUseCases {
             .pricing
             .prices_for(&tracked_assets_of_all(&accounts), false)
             .await?;
+        let ledger = checking_ledger(self.budget.as_ref())?;
         Ok(ValuedAccounts {
             accounts: accounts
                 .into_iter()
                 .map(|account| {
-                    let valuation = value_account(&account, &refresh.prices);
+                    let valuation = value_account(&account, &refresh.prices, &ledger);
                     (account, valuation)
                 })
                 .collect(),
@@ -115,7 +120,8 @@ impl AccountUseCases {
                 false,
             )
             .await?;
-        let valuation = value_account(&account, &refresh.prices);
+        let ledger = checking_ledger(self.budget.as_ref())?;
+        let valuation = value_account(&account, &refresh.prices, &ledger);
         Ok((account, valuation, refresh.issues))
     }
 
@@ -161,10 +167,15 @@ impl AccountUseCases {
         })
     }
 
-    /// Mise à jour du solde d'un livret, datée du jour.
-    pub fn update_savings_balance(&self, id: AccountId, balance: Money) -> AppResult<()> {
-        let today = self.clock.today();
-        self.modify(id, |account| account.update_savings_balance(balance, today))
+    /// Mise à jour du solde d'un livret (positif ou nul) ou d'un compte courant (signé), datée du
+    /// jour. Pour un compte courant, le solde saisi devient la nouvelle référence : les mouvements
+    /// déjà saisis sont réputés inclus.
+    pub fn update_balance(&self, id: AccountId, balance: Money) -> AppResult<()> {
+        let (today, now) = (self.clock.today(), self.clock.now());
+        self.modify(id, |account| match account.account_type() {
+            AccountType::Checking => account.update_checking_balance(balance, today, now),
+            _ => account.update_savings_balance(balance, today),
+        })
     }
 
     pub fn set_savings_terms(
@@ -325,7 +336,9 @@ fn find_fund(account: &Account, fund_id: FundId) -> Result<PeiFund, DomainError>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::budget::ExpenseInput;
     use crate::testing::{TestEnv, asset};
+    use lc_domain::account::CheckingLedger;
     use lc_domain::valuation::{NavKind, PriceBook, value_account};
     use pollster::block_on;
     use rust_decimal_macros::dec;
@@ -339,6 +352,98 @@ mod tests {
         }
     }
 
+    // Spec checking-account : « Dépenses après la référence », « Recalage » et « Découvert »
+    #[test]
+    fn checking_balance_follows_linked_movements_until_the_next_reference() {
+        let env = TestEnv::new();
+        let (accounts, budget) = (env.accounts(), env.budget());
+        budget.ensure_default_categories().unwrap();
+        let food = budget.categories(false).unwrap()[0].id();
+        let checking = accounts
+            .create_account(new_account("Compte courant", AccountType::Checking))
+            .unwrap();
+        let balance = || block_on(accounts.valued_account(checking)).unwrap().1.value;
+
+        accounts
+            .update_balance(checking, Money::new(dec!(1000)))
+            .unwrap();
+        env.clock.advance(chrono::Duration::minutes(5));
+        budget
+            .add_expense(ExpenseInput {
+                amount: Money::new(dec!(42.50)),
+                category: food,
+                date: None,
+                label: Some("Courses".into()),
+                account: Some(checking),
+            })
+            .unwrap();
+        budget
+            .upsert_one_off_income(
+                None,
+                "Remboursement",
+                Money::new(dec!(100)),
+                env.clock.today(),
+                Some(checking),
+            )
+            .unwrap();
+        assert_eq!(balance(), Money::new(dec!(1057.50)));
+        let movements = block_on(accounts.valued_account(checking))
+            .unwrap()
+            .1
+            .movements;
+        assert_eq!(movements.len(), 2);
+
+        env.clock.advance(chrono::Duration::minutes(5));
+        accounts
+            .update_balance(checking, Money::new(dec!(980)))
+            .unwrap();
+        assert_eq!(balance(), Money::new(dec!(980)));
+
+        accounts
+            .update_balance(checking, Money::new(dec!(-85.40)))
+            .unwrap();
+        assert_eq!(balance(), Money::new(dec!(-85.40)));
+    }
+
+    #[test]
+    fn movements_link_only_to_an_active_checking_account() {
+        let env = TestEnv::new();
+        let (accounts, budget) = (env.accounts(), env.budget());
+        budget.ensure_default_categories().unwrap();
+        let food = budget.categories(false).unwrap()[0].id();
+        let livret = accounts
+            .create_account(new_account("Livret A", AccountType::LivretA))
+            .unwrap();
+        let checking = accounts
+            .create_account(new_account("Compte courant", AccountType::Checking))
+            .unwrap();
+        let expense = |account| ExpenseInput {
+            amount: Money::new(dec!(10)),
+            category: food,
+            date: None,
+            label: None,
+            account: Some(account),
+        };
+
+        assert_eq!(
+            budget.add_expense(expense(livret)),
+            Err(AppError::InvalidAccountLink)
+        );
+        assert_eq!(
+            accounts.update_balance(livret, Money::new(dec!(-1))),
+            Err(AppError::Domain(DomainError::NegativeAmount)),
+            "un livret ne peut pas être à découvert"
+        );
+        let linked = budget.add_expense(expense(checking)).unwrap();
+
+        // Compte clôturé : plus de nouveau rattachement, mais l'existant reste modifiable.
+        accounts.archive_account(checking).unwrap();
+        assert_eq!(
+            budget.add_expense(expense(checking)),
+            Err(AppError::InvalidAccountLink)
+        );
+        assert_eq!(budget.update_expense(linked, expense(checking)), Ok(()));
+    }
     // Spec account-management : « Création d'un compte »
     #[test]
     fn creates_account_with_type_defaults() {
@@ -353,7 +458,7 @@ mod tests {
         assert_eq!(pea.name().as_str(), "PEA Bourso");
         assert_eq!(pea.color(), &defaults::color(AccountType::Pea));
         assert_eq!(
-            value_account(&pea, &PriceBook::default()).value,
+            value_account(&pea, &PriceBook::default(), &CheckingLedger::default()).value,
             Money::ZERO
         );
     }
@@ -430,7 +535,7 @@ mod tests {
             .unwrap();
 
         accounts
-            .update_savings_balance(id, Money::new(dec!(10640)))
+            .update_balance(id, Money::new(dec!(10640)))
             .unwrap();
 
         let AccountKind::Savings(details) = accounts.get_account(id).unwrap().kind().clone() else {
@@ -511,7 +616,7 @@ mod tests {
                 .prices_for(&[asset(QuoteSource::TwelveData, "IWDA")], false),
         )
         .unwrap();
-        let valuation = value_account(&account, &refresh.prices);
+        let valuation = value_account(&account, &refresh.prices, &CheckingLedger::default());
         assert_eq!(valuation.funds[0].nav, Money::new(dec!(26)));
         assert_eq!(valuation.funds[0].nav_kind, NavKind::Estimated);
 

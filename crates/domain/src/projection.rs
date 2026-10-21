@@ -44,7 +44,9 @@ impl ProjectedAccount {
     pub fn from_account(account: &Account, current_value: Money) -> Self {
         let deposit_ceiling = match account.kind() {
             AccountKind::Savings(details) => Some(details.deposit_ceiling()),
-            AccountKind::Securities(_) | AccountKind::EmployeeSavings(_) => None,
+            AccountKind::Securities(_)
+            | AccountKind::EmployeeSavings(_)
+            | AccountKind::Checking(_) => None,
         };
         Self {
             account_id: account.id(),

@@ -27,7 +27,10 @@ pub use settings::SqliteSettingsStore;
 pub use snapshots::SqliteSnapshotRepository;
 
 /// Migrations appliquées dans l'ordre ; l'index + 1 est la version de schéma atteinte.
-const MIGRATIONS: &[&str] = &[include_str!("../../migrations/001_initial.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("../../migrations/001_initial.sql"),
+    include_str!("../../migrations/002_checking_account.sql"),
+];
 
 /// Base de données de l'application, partagée entre les dépôts.
 #[derive(Clone)]

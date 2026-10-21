@@ -11,6 +11,7 @@ mod dashboard;
 mod error;
 mod projection;
 mod session;
+mod updates;
 
 pub use accounts::*;
 pub use budget::*;
@@ -19,6 +20,7 @@ pub use dashboard::*;
 pub use error::*;
 pub use projection::*;
 pub use session::*;
+pub use updates::*;
 
 pub use chrono::{DateTime, NaiveDate, Utc};
 pub use rust_decimal::Decimal;

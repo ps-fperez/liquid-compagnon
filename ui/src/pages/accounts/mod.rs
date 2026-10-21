@@ -1,6 +1,7 @@
 //! Comptes : liste, création, fiche détaillée par nature de compte.
 
 mod asset_search;
+mod checking;
 mod create;
 mod detail;
 mod list;

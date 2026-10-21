@@ -1,14 +1,15 @@
 use lc_application::ports::{AccountRepository, StorageResult};
 use lc_domain::account::{
-    Account, AccountKind, AssetRef, CurrencyCode, EmployeeSavingsDetails, NavAnchor, PeiFund,
-    Position, SavingsDetails, SavingsProduct, ScenarioRates, SecuritiesDetails, SecuritiesProduct,
+    Account, AccountKind, AssetRef, CheckingDetails, CurrencyCode, EmployeeSavingsDetails,
+    NavAnchor, PeiFund, Position, SavingsDetails, SavingsProduct, ScenarioRates, SecuritiesDetails,
+    SecuritiesProduct,
 };
 use lc_domain::{AccountId, Color, FundId, Label, Money, Rate};
 use rusqlite::{Connection, Row, params};
 
 use super::{
-    Database, SqlResultExt, corrupt, date, decimal, domain, money, optional_money, source_from_sql,
-    source_to_sql, uuid,
+    Database, SqlResultExt, corrupt, date, datetime, decimal, domain, money, optional_money,
+    source_from_sql, source_to_sql, uuid,
 };
 
 pub struct SqliteAccountRepository {
@@ -42,38 +43,53 @@ impl AccountRepository for SqliteAccountRepository {
 pub(crate) fn save_account(conn: &Connection, account: &Account) -> StorageResult<()> {
     let id = account.id().to_string();
     let rates = account.scenario_rates();
-    let (nature, product, balance, rate, ceiling, updated_on, cash) = match account.kind() {
-        AccountKind::Savings(d) => (
-            "savings",
-            Some(match d.product() {
-                SavingsProduct::LivretA => "livret_a",
-                SavingsProduct::Ldds => "ldds",
-            }),
-            Some(d.balance().amount().to_string()),
-            Some(d.rate().as_fraction().to_string()),
-            Some(d.deposit_ceiling().amount().to_string()),
-            Some(d.balance_updated_on().to_string()),
-            None,
-        ),
-        AccountKind::Securities(d) => (
-            "securities",
-            Some(match d.product() {
-                SecuritiesProduct::Pea => "pea",
-                SecuritiesProduct::Crypto => "crypto",
-            }),
-            None,
-            None,
-            None,
-            None,
-            Some(d.cash().amount().to_string()),
-        ),
-        AccountKind::EmployeeSavings(_) => ("employee_savings", None, None, None, None, None, None),
-    };
+    let (nature, product, balance, rate, ceiling, updated_on, cash, reference_at) =
+        match account.kind() {
+            AccountKind::Savings(d) => (
+                "savings",
+                Some(match d.product() {
+                    SavingsProduct::LivretA => "livret_a",
+                    SavingsProduct::Ldds => "ldds",
+                }),
+                Some(d.balance().amount().to_string()),
+                Some(d.rate().as_fraction().to_string()),
+                Some(d.deposit_ceiling().amount().to_string()),
+                Some(d.balance_updated_on().to_string()),
+                None,
+                None,
+            ),
+            AccountKind::Securities(d) => (
+                "securities",
+                Some(match d.product() {
+                    SecuritiesProduct::Pea => "pea",
+                    SecuritiesProduct::Crypto => "crypto",
+                }),
+                None,
+                None,
+                None,
+                None,
+                Some(d.cash().amount().to_string()),
+                None,
+            ),
+            AccountKind::EmployeeSavings(_) => {
+                ("employee_savings", None, None, None, None, None, None, None)
+            }
+            AccountKind::Checking(d) => (
+                "checking",
+                None,
+                Some(d.reference_balance().amount().to_string()),
+                None,
+                None,
+                Some(d.reference_on().to_string()),
+                None,
+                Some(d.reference_at().to_rfc3339()),
+            ),
+        };
     conn.execute(
         "INSERT INTO accounts (id, name, color, nature, product, balance, rate, deposit_ceiling,
              balance_updated_on, cash, monthly_contribution, rate_pessimistic, rate_neutral,
-             rate_optimistic, archived)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+             rate_optimistic, archived, reference_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
          ON CONFLICT(id) DO UPDATE SET
              name = excluded.name, color = excluded.color, nature = excluded.nature,
              product = excluded.product, balance = excluded.balance, rate = excluded.rate,
@@ -81,7 +97,8 @@ pub(crate) fn save_account(conn: &Connection, account: &Account) -> StorageResul
              balance_updated_on = excluded.balance_updated_on, cash = excluded.cash,
              monthly_contribution = excluded.monthly_contribution,
              rate_pessimistic = excluded.rate_pessimistic, rate_neutral = excluded.rate_neutral,
-             rate_optimistic = excluded.rate_optimistic, archived = excluded.archived",
+             rate_optimistic = excluded.rate_optimistic, archived = excluded.archived,
+             reference_at = excluded.reference_at",
         params![
             id,
             account.name().as_str(),
@@ -98,6 +115,7 @@ pub(crate) fn save_account(conn: &Connection, account: &Account) -> StorageResul
             rates.neutral.as_fraction().to_string(),
             rates.optimistic.as_fraction().to_string(),
             account.is_archived(),
+            reference_at,
         ],
     )
     .db()?;
@@ -154,7 +172,7 @@ pub(crate) fn save_account(conn: &Connection, account: &Account) -> StorageResul
                 .db()?;
             }
         }
-        AccountKind::Savings(_) => {}
+        AccountKind::Savings(_) | AccountKind::Checking(_) => {}
     }
     Ok(())
 }
@@ -172,6 +190,7 @@ struct AccountRow {
     deposit_ceiling: Option<String>,
     balance_updated_on: Option<String>,
     cash: Option<String>,
+    reference_at: Option<String>,
     monthly_contribution: String,
     rates: [String; 3],
     archived: bool,
@@ -190,6 +209,7 @@ impl AccountRow {
             deposit_ceiling: row.get("deposit_ceiling")?,
             balance_updated_on: row.get("balance_updated_on")?,
             cash: row.get("cash")?,
+            reference_at: row.get("reference_at")?,
             monthly_contribution: row.get("monthly_contribution")?,
             rates: [
                 row.get("rate_pessimistic")?,
@@ -245,6 +265,14 @@ fn account_from_row(conn: &Connection, row: AccountRow) -> StorageResult<Account
             },
             money(&required(row.cash.clone(), "cash")?)?,
             load_positions(conn, &row.id)?,
+        ))?),
+        ("checking", _) => AccountKind::Checking(domain(CheckingDetails::new(
+            Money::new(decimal(&required(row.balance.clone(), "balance")?)?),
+            date(&required(
+                row.balance_updated_on.clone(),
+                "balance_updated_on",
+            )?)?,
+            datetime(&required(row.reference_at.clone(), "reference_at")?)?,
         ))?),
         ("employee_savings", _) => {
             AccountKind::EmployeeSavings(EmployeeSavingsDetails::new(load_funds(conn, &row.id)?))

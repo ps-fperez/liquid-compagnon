@@ -1,4 +1,4 @@
-use lc_shared_dto::{Decimal, NaiveDate, SavingsBalanceInput, SavingsTermsInput};
+use lc_shared_dto::{BalanceInput, Decimal, NaiveDate, SavingsTermsInput};
 use leptos::prelude::*;
 
 use crate::api;
@@ -47,32 +47,41 @@ pub fn SavingsDetails(
             <button class=BTN_PRIMARY on:click=move |_| balance_open.set(true)>"Mettre à jour le solde"</button>
             <button class=BTN_SECONDARY on:click=move |_| terms_open.set(true)>"Taux et plafond"</button>
         </div>
-        <BalanceSheet open=balance_open account_id=account_id.clone() current=balance on_saved=on_saved />
+        <BalanceSheet open=balance_open account_id=account_id.clone() current=balance allow_negative=false on_saved=on_saved />
         <TermsSheet open=terms_open account_id=account_id rate_percent=rate_percent deposit_ceiling=deposit_ceiling on_saved=on_saved />
     }
 }
 
+/// Nouveau solde d'un livret ou, avec llow_negative, d'un compte courant (le clavier
+/// numérique d'Android n'a pas toujours de signe moins : un interrupteur « Découvert » le remplace).
 #[component]
-fn BalanceSheet(
+pub fn BalanceSheet(
     open: RwSignal<bool>,
     account_id: String,
     current: Decimal,
+    allow_negative: bool,
     on_saved: Callback<()>,
 ) -> impl IntoView {
-    let amount = RwSignal::new(format::quantity(current));
+    let amount = RwSignal::new(format::quantity(current.abs()));
+    let overdrawn = RwSignal::new(current.is_sign_negative() && !current.is_zero());
     let error = RwSignal::new(None::<String>);
     let busy = RwSignal::new(false);
     let account_id = StoredValue::new(account_id);
     let submit = move |_| {
-        let balance = match format::parse_amount(&amount.get_untracked()) {
+        let entered = match format::parse_amount(&amount.get_untracked()) {
             Ok(balance) => balance,
             Err(message) => return error.set(Some(message)),
         };
-        let input = SavingsBalanceInput {
+        let balance = if allow_negative && overdrawn.get_untracked() {
+            -entered.abs()
+        } else {
+            entered
+        };
+        let input = BalanceInput {
             account_id: account_id.get_value(),
             balance,
         };
-        run_action(busy, error, api::update_savings_balance(input), move |()| {
+        run_action(busy, error, api::update_balance(input), move |()| {
             open.set(false);
             on_saved.run(());
         });
@@ -81,6 +90,17 @@ fn BalanceSheet(
         <BottomSheet open=open title="Mettre à jour le solde">
             <div class="flex flex-col gap-4">
                 <Field label="Nouveau solde" value=amount input_mode="decimal" suffix="€" />
+                {allow_negative.then(|| view! {
+                    <label class="flex min-h-11 items-center justify-between gap-3">
+                        <span class="text-sm">"Solde négatif (découvert)"</span>
+                        <input
+                            type="checkbox"
+                            class="size-5 accent-primary"
+                            prop:checked=move || overdrawn.get()
+                            on:change=move |event| overdrawn.set(event_target_checked(&event))
+                        />
+                    </label>
+                })}
                 <p class="min-h-5 text-sm text-loss" role="alert">{move || error.get()}</p>
                 <button class=BTN_PRIMARY disabled=move || busy.get() on:click=submit>"Enregistrer"</button>
             </div>

@@ -1,6 +1,6 @@
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate, Utc};
 
-use crate::{CategoryId, DomainError, ExpenseId, Label, Money, Month};
+use crate::{AccountId, CategoryId, DomainError, ExpenseId, Label, Money, Month};
 
 /// Dépense ponctuelle, rattachée à une catégorie et à une date.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -10,6 +10,10 @@ pub struct Expense {
     category: CategoryId,
     date: NaiveDate,
     label: Option<Label>,
+    /// Compte courant débité, le cas échéant.
+    account: Option<AccountId>,
+    /// Instant de la saisie (absent pour les dépenses antérieures à son introduction).
+    recorded_at: Option<DateTime<Utc>>,
 }
 
 impl Expense {
@@ -26,7 +30,28 @@ impl Expense {
             category,
             date,
             label,
+            account: None,
+            recorded_at: None,
         })
+    }
+
+    /// Rattache la dépense à un compte courant (ou à aucun compte).
+    pub fn linked_to(mut self, account: Option<AccountId>) -> Self {
+        self.account = account;
+        self
+    }
+
+    pub fn recorded(mut self, at: Option<DateTime<Utc>>) -> Self {
+        self.recorded_at = at;
+        self
+    }
+
+    pub fn account(&self) -> Option<AccountId> {
+        self.account
+    }
+
+    pub fn recorded_at(&self) -> Option<DateTime<Utc>> {
+        self.recorded_at
     }
 
     pub fn id(&self) -> ExpenseId {

@@ -1,8 +1,9 @@
-use lc_shared_dto::{AccountDetailsDto, AccountDto, ErrorDto, IdInput};
+use lc_shared_dto::{AccountDetailsDto, AccountDto, AccountTypeDto, ErrorDto, IdInput};
 use leptos::prelude::*;
 use leptos_router::components::A;
 use leptos_router::hooks::use_params_map;
 
+use super::checking::CheckingDetails;
 use super::pei::PeiDetails;
 use super::savings::SavingsDetails;
 use super::securities::SecuritiesDetails;
@@ -72,6 +73,22 @@ fn AccountView(account: AccountDto, on_saved: Callback<()>) -> impl IntoView {
             />
         }
         .into_any(),
+        AccountDetailsDto::Checking {
+            balance,
+            reference_balance,
+            reference_on,
+            movements,
+        } => view! {
+            <CheckingDetails
+                account_id=account.id.clone()
+                balance=balance
+                reference_balance=reference_balance
+                reference_on=reference_on
+                movements=movements
+                on_saved=on_saved
+            />
+        }
+        .into_any(),
         AccountDetailsDto::EmployeeSavings { funds } => view! {
             <PeiDetails account_id=account.id.clone() funds=funds on_saved=on_saved />
         }
@@ -94,13 +111,16 @@ fn AccountView(account: AccountDto, on_saved: Callback<()>) -> impl IntoView {
 
         {details}
 
-        <section class="flex flex-col gap-2">
-            <h2 class=SECTION_TITLE>"Projection"</h2>
-            <Card class="flex items-center justify-between">
-                <span class="text-sm text-muted">"Versement mensuel programmé"</span>
-                <Amount value=account.monthly_contribution />
-            </Card>
-        </section>
+        // Le compte courant reste à son solde dans la projection : pas de versement programmé.
+        {(account.account_type != AccountTypeDto::Checking).then(|| view! {
+            <section class="flex flex-col gap-2">
+                <h2 class=SECTION_TITLE>"Projection"</h2>
+                <Card class="flex items-center justify-between">
+                    <span class="text-sm text-muted">"Versement mensuel programmé"</span>
+                    <Amount value=account.monthly_contribution />
+                </Card>
+            </section>
+        })}
 
         <div class="flex flex-col gap-2">
             <button class=BTN_SECONDARY on:click=move |_| settings_open.set(true)>"Paramètres du compte"</button>

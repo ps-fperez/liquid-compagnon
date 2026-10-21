@@ -142,8 +142,39 @@ Légende de couverture :
 | Mode discret | vérifié dans la galerie (tous les montants masqués) | [ ] Icône œil : plus aucun montant lisible |
 | Cibles tactiles ≥ 44 px, contraste | classes `min-h-11` et plus, palette sombre | [ ] Utilisation à une main |
 
-## Anomalies
+## Compte courant (checking-account, v0.2)
 
+| Scénario | Couverture automatique | Téléphone |
+|---|---|---|
+| Création et premier solde | dom : `checking_account_is_valued_from_its_reference_and_ledger` · e2e 12 | [ ] Créer « Compte courant », saisir le solde du jour |
+| Découvert | dom : `overdraft_is_allowed_but_not_sub_cent_amounts` · app : `checking_balance_follows_linked_movements_until_the_next_reference` · e2e 12 | [ ] Case « découvert » : solde négatif, retranché du patrimoine |
+| Saisie rapide | e2e 12 (compte présélectionné, trois gestes) | [ ] « + » › Dépense : « Payé depuis » montre le compte courant |
+| Sans compte courant | e2e 7 (aucun choix de compte affiché) | — |
+| Rattachement refusé | app : `movements_link_only_to_an_active_checking_account` | — |
+| Dépenses après la référence | dom : `movements_after_the_reference_change_the_balance` · app : `checking_balance_follows_linked_movements_until_the_next_reference` · e2e 12 | [ ] Le solde baisse après une dépense |
+| Recalage | dom : `movements_already_included_in_the_reference_are_ignored` · e2e 12 | [ ] « Mettre à jour le solde » : la liste des mouvements se vide |
+| Dépense oubliée d'avant la référence | dom : `movements_already_included_in_the_reference_are_ignored` | — |
+| Mouvements depuis la référence | e2e 12 | — |
+| Projection | dom : rendements nuls (`checking_account_is_valued_from_its_reference_and_ledger`) | [ ] Projection : compte courant constant |
+| Aller-retour de sauvegarde | app : `export_then_import_restores_identical_data` · infra : `full_journey_from_setup_to_restored_backup` | — |
+| Ancien fichier (v1) | infra : `version_1_exports_are_still_readable` | — |
+
+## Mises à jour (app-updates, v0.2)
+
+| Scénario | Couverture automatique | Téléphone |
+|---|---|---|
+| Build de main | CI : `latest.json` publié avec l'APK, versionCode 100000 + run | [ ] Release « dernier-build » : APK + `latest.json` |
+| Version plus récente | app : `newer_build_is_proposed` | [ ] Installer le build N, publier N+1 : invitation au déverrouillage |
+| Déjà à jour | app : `newer_build_is_proposed` | [ ] Réglages › Mises à jour : « Application à jour » |
+| Build local | app : `local_builds_never_update` · e2e 10 | — |
+| Hors ligne | app : `feed_errors_are_reported` | [ ] Mode avion : aucune erreur au démarrage |
+| Report | — | [ ] « Plus tard » : plus d'invitation pour ce build, pastille sur l'engrenage |
+| Mise à jour réussie | infra : `verified_download_reports_progress` | [ ] « Mettre à jour » : progression, installeur Android, données intactes |
+| Fichier altéré | infra : `altered_download_is_deleted` · app : `apk_must_come_from_the_app_releases` | — |
+| Autorisation manquante | — | [ ] Premier essai : réglage « Installer des applis inconnues » ouvert |
+| Vérification automatique désactivée | src-tauri : `automatic_checks_are_spaced_by_six_hours` | [ ] Option désactivée : pas d'invitation |
+
+## Anomalies
 | # | Écran | Description | Statut |
 |---|---|---|---|
 | | | | |

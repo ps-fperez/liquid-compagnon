@@ -1,6 +1,6 @@
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate, Utc};
 
-use crate::{DomainError, IncomeId, Label, Money, Month, SalaryId};
+use crate::{AccountId, DomainError, IncomeId, Label, Money, Month, SalaryId};
 
 /// Salaire net mensuel (net à payer) applicable à partir d'un mois donné.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,6 +43,10 @@ pub struct OneOffIncome {
     label: Label,
     amount: Money,
     date: NaiveDate,
+    /// Compte courant crédité, le cas échéant.
+    account: Option<AccountId>,
+    /// Instant de la saisie (absent pour les revenus antérieurs à son introduction).
+    recorded_at: Option<DateTime<Utc>>,
 }
 
 impl OneOffIncome {
@@ -57,7 +61,28 @@ impl OneOffIncome {
             label,
             amount: amount.validate_entry()?,
             date,
+            account: None,
+            recorded_at: None,
         })
+    }
+
+    /// Rattache le revenu à un compte courant (ou à aucun compte).
+    pub fn linked_to(mut self, account: Option<AccountId>) -> Self {
+        self.account = account;
+        self
+    }
+
+    pub fn recorded(mut self, at: Option<DateTime<Utc>>) -> Self {
+        self.recorded_at = at;
+        self
+    }
+
+    pub fn account(&self) -> Option<AccountId> {
+        self.account
+    }
+
+    pub fn recorded_at(&self) -> Option<DateTime<Utc>> {
+        self.recorded_at
     }
 
     pub fn id(&self) -> IncomeId {

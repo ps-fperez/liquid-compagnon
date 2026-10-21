@@ -13,6 +13,7 @@ pub mod ports;
 pub mod pricing;
 pub mod projection;
 pub mod security;
+pub mod updates;
 
 #[cfg(test)]
 mod testing;

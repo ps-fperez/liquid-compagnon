@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use lc_shared_dto::{
-    CategoryDto, ExpenseDto, ExpenseInput, ExpenseListDto, IdInput, LabelSuggestionDto, NaiveDate,
+    AccountOptionDto, CategoryDto, ExpenseDto, ExpenseInput, ExpenseListDto, IdInput,
+    LabelSuggestionDto, NaiveDate,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -12,12 +13,15 @@ use crate::components::{Amount, BottomSheet, Card, EmptyState, ErrorBanner, Fiel
 use crate::format;
 use crate::util::{Loaded, run_action, today};
 
+use super::account_choice::{AccountChoice, AccountSelection, resolve};
+
 /// Dépenses du mois : filtre par catégorie, total, liste groupée par jour.
 #[component]
 pub fn ExpensesSection(
     expenses: Loaded<ExpenseListDto>,
     filter: RwSignal<Option<String>>,
     categories: Signal<Vec<CategoryDto>>,
+    checking: Signal<Vec<AccountOptionDto>>,
     open_new: RwSignal<bool>,
     on_saved: Callback<()>,
 ) -> impl IntoView {
@@ -106,11 +110,11 @@ pub fn ExpensesSection(
                 }
             }}
         </section>
-        <ExpenseSheet open=open_new categories=categories existing=None on_saved=on_saved />
+        <ExpenseSheet open=open_new categories=categories checking=checking existing=None on_saved=on_saved />
         {move || editing.get().map(|expense| {
             let open = RwSignal::new(true);
             Effect::new(move |_| if !open.get() { editing.set(None) });
-            view! { <ExpenseSheet open=open categories=categories existing=Some(expense) on_saved=on_saved /> }
+            view! { <ExpenseSheet open=open categories=categories checking=checking existing=Some(expense) on_saved=on_saved /> }
         })}
     }
 }
@@ -121,10 +125,12 @@ pub fn ExpensesSection(
 pub fn ExpenseSheet(
     open: RwSignal<bool>,
     categories: Signal<Vec<CategoryDto>>,
+    checking: Signal<Vec<AccountOptionDto>>,
     existing: Option<ExpenseDto>,
     on_saved: Callback<()>,
 ) -> impl IntoView {
     let editing = existing.is_some();
+    let account: AccountSelection = RwSignal::new(existing.as_ref().map(|e| e.account_id.clone()));
     let amount = RwSignal::new(
         existing
             .as_ref()
@@ -168,6 +174,7 @@ pub fn ExpenseSheet(
             category_id,
             date: Some(date),
             label: label_text,
+            account_id: resolve(account.get_untracked(), &checking.get_untracked()),
         };
         run_action(busy, error, api::save_expense(input), move |_: String| {
             // Une nouvelle saisie repart d'une feuille vide.
@@ -176,6 +183,7 @@ pub fn ExpenseSheet(
                 label.set(String::new());
                 category.set(None);
                 more.set(false);
+                account.set(None);
             }
             open.set(false);
             on_saved.run(());
@@ -292,6 +300,7 @@ pub fn ExpenseSheet(
                 <Show when=move || !more.get()>
                     <button class=format!("{BTN_GHOST} self-start px-0") on:click=move |_| more.set(true)>"Date et libellé"</button>
                 </Show>
+                <AccountChoice label="Payé depuis" options=checking selection=account />
                 <div class="flex flex-col gap-1.5">
                     <span class=LABEL>
                         {if editing { "Catégorie" } else { "Catégorie (touchez pour enregistrer)" }}

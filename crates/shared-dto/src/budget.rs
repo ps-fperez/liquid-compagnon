@@ -36,6 +36,9 @@ pub struct OneOffIncomeDto {
     pub label: String,
     pub amount: Decimal,
     pub date: NaiveDate,
+    /// Compte courant crédité.
+    #[serde(default)]
+    pub account_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -65,6 +68,9 @@ pub struct ExpenseDto {
     pub category_id: String,
     pub date: NaiveDate,
     pub label: Option<String>,
+    /// Compte courant débité.
+    #[serde(default)]
+    pub account_id: Option<String>,
 }
 
 /// Libellé déjà utilisé, proposé à la saisie d'une dépense avec sa dernière catégorie.
@@ -118,6 +124,9 @@ pub struct OneOffIncomeInput {
     pub label: String,
     pub amount: Decimal,
     pub date: NaiveDate,
+    /// Compte courant crédité, le cas échéant.
+    #[serde(default)]
+    pub account_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -140,6 +149,9 @@ pub struct ExpenseInput {
     /// Aujourd'hui si absent.
     pub date: Option<NaiveDate>,
     pub label: Option<String>,
+    /// Compte courant débité, le cas échéant.
+    #[serde(default)]
+    pub account_id: Option<String>,
 }
 
 /// Référence à un élément à supprimer, archiver… (identifiant UUID).

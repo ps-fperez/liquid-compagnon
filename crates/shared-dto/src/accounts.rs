@@ -56,6 +56,31 @@ pub enum AccountDetailsDto {
     EmployeeSavings {
         funds: Vec<FundDto>,
     },
+    Checking {
+        /// Solde courant : référence et mouvements comptés.
+        balance: Decimal,
+        reference_balance: Decimal,
+        reference_on: NaiveDate,
+        /// Mouvements comptés depuis la référence, du plus récent au plus ancien.
+        movements: Vec<CheckingMovementDto>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MovementKindDto {
+    Expense,
+    Income,
+}
+
+/// Dépense ou revenu ponctuel rattaché à un compte courant.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CheckingMovementDto {
+    pub kind: MovementKindDto,
+    /// Montant signé : négatif pour une dépense.
+    pub amount: Decimal,
+    pub date: NaiveDate,
+    pub label: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -78,6 +103,13 @@ pub struct AccountListDto {
     pub pricing_issues: Vec<PricingIssueDto>,
 }
 
+/// Compte courant proposé au rattachement d'une dépense ou d'un revenu ponctuel.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AccountOptionDto {
+    pub id: String,
+    pub name: String,
+}
+
 // --- Saisies ------------------------------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -97,8 +129,9 @@ pub struct AccountUpdateInput {
     pub monthly_contribution: Decimal,
 }
 
+/// Nouveau solde d'un livret (positif ou nul) ou d'un compte courant (signé).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SavingsBalanceInput {
+pub struct BalanceInput {
     pub account_id: String,
     pub balance: Decimal,
 }

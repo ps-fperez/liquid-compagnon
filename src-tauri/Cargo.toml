@@ -28,6 +28,7 @@ tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 
 [dev-dependencies]
+async-trait.workspace = true
 rust_decimal.workspace = true
 rust_decimal_macros.workspace = true
 

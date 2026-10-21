@@ -1,8 +1,8 @@
 # Liquid Compagnon
 
-Application Android personnelle de suivi de patrimoine et d'épargne : vue agrégée des comptes (Livret A, LDDS, PEA, PEI, crypto), budget, cours en temps réel et projection à 3, 6 et 12 mois. Toutes les données restent sur le téléphone (SQLite local, aucune sauvegarde cloud) ; seuls les identifiants d'actifs partent vers CoinGecko, Yahoo Finance et Twelve Data pour les cours.
+Application Android personnelle de suivi de patrimoine et d'épargne : vue agrégée des comptes (compte courant, Livret A, LDDS, PEA, PEI, crypto), budget, cours en temps réel et projection à 3, 6 et 12 mois. Toutes les données restent sur le téléphone (SQLite local, aucune sauvegarde cloud) ; seuls les identifiants d'actifs partent vers CoinGecko, Yahoo Finance et Twelve Data pour les cours, et la vérification des mises à jour lit un fichier public sur github.com (désactivable).
 
-Spécification : [`openspec/changes/liquid-compagnon-v1`](openspec/changes/liquid-compagnon-v1/). Recette : [`docs/recette-v1.md`](docs/recette-v1.md).
+Spécification : [`openspec/changes/liquid-compagnon-v1`](openspec/changes/liquid-compagnon-v1/), puis [`compte-courant-et-mises-a-jour`](openspec/changes/compte-courant-et-mises-a-jour/) (v0.2). Recette : [`docs/recette-v1.md`](docs/recette-v1.md).
 
 ## Stack
 
@@ -41,9 +41,23 @@ powershell -File scripts/new-keystore.ps1
 
 Le script demande un mot de passe (jamais affiché ni écrit en clair), crée `%USERPROFILE%\.liquid-compagnon\release.jks` et enregistre les secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD` et `ANDROID_KEY_ALIAS` dans le dépôt GitHub. Les builds suivants sont des APK de release signés. **Sauvegarder `release.jks` hors du PC** : sans lui, plus aucune mise à jour ne pourra s'installer par-dessus la version existante.
 
+### Mises à jour depuis l'application (à partir de la v0.2)
+
+Chaque APK publié par la CI est accompagné d'un `latest.json` (numéro de build, empreinte SHA-256). Au déverrouillage (au plus toutes les 6 h, désactivable dans Réglages › Mises à jour), l'application compare son build à celui publié et invite à mettre à jour :
+
+1. « Mettre à jour » télécharge l'APK et vérifie sa taille et son empreinte ;
+2. la première fois, Android demande d'autoriser Liquid Compagnon à installer des applications : autoriser, revenir, toucher de nouveau « Mettre à jour » ;
+3. l'installeur Android propose « Mettre à jour » : les données sont conservées.
+
+La version 0.2 elle-même s'installe une dernière fois à la main (depuis « dernier-build ») : les versions antérieures ne savent pas se mettre à jour. Un build fait sur le PC n'a pas de numéro et ne propose jamais de mise à jour.
+
+### Compte courant
+
+Créer un compte « Compte courant », puis saisir son solde (case « découvert » pour un solde négatif). Les dépenses et revenus ponctuels saisis ensuite sont rattachés par défaut au premier compte courant (choix « Payé depuis » / « Versé sur ») et font évoluer son solde. Le salaire et les charges fixes ne sont pas imputés : recaler le solde de temps en temps (« Mettre à jour le solde ») ; les mouvements déjà saisis sont alors réputés inclus.
+
 ### Sauvegarde des données
 
-Réglages › **Exporter mes données** écrit un fichier JSON (sélecteur de fichiers Android). Il contient toutes les données en clair, sans le code PIN ni la clé Twelve Data : le conserver dans un endroit sûr. Réglages › **Importer une sauvegarde** le restaure (fichier entièrement vérifié avant tout remplacement). Un rappel s'affiche si aucun export n'a eu lieu depuis 30 jours.
+Réglages › **Exporter mes données** écrit un fichier JSON (sélecteur de fichiers Android). Il contient toutes les données en clair (format v2 depuis la v0.2 ; les exports v1 restent importables), sans le code PIN ni la clé Twelve Data : le conserver dans un endroit sûr. Réglages › **Importer une sauvegarde** le restaure (fichier entièrement vérifié avant tout remplacement). Un rappel s'affiche si aucun export n'a eu lieu depuis 30 jours.
 
 ### Cours des ETF
 

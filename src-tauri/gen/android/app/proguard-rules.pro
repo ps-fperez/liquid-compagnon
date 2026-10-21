@@ -19,3 +19,8 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Plugin Tauri chargé par réflexion depuis Rust (register_android_plugin) : nom et méthodes
+# @Command conservés, ainsi que les arguments désérialisés.
+-keep class com.liquidcompagnon.app.ApkInstallerPlugin { *; }
+-keep class com.liquidcompagnon.app.InstallArgs { *; }

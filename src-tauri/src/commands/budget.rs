@@ -3,7 +3,7 @@
 use lc_application::budget::{
     ChargeInput as UseCaseChargeInput, ExpenseInput as UseCaseExpenseInput,
 };
-use lc_domain::{CategoryId, ChargeId, ExpenseId, IncomeId, Money, SalaryId};
+use lc_domain::{AccountId, CategoryId, ChargeId, ExpenseId, IncomeId, Money, SalaryId};
 use lc_shared_dto::*;
 
 use super::{AppState, blocking, unlocked};
@@ -162,6 +162,7 @@ pub async fn upsert_one_off_income(
                 &input.label,
                 Money::new(input.amount),
                 input.date,
+                optional_id(input.account_id.as_deref(), AccountId::from_uuid)?,
             )
             .map_err(app_error)?;
         Ok(income_id.to_string())
@@ -252,6 +253,7 @@ pub async fn save_expense(state: AppState<'_>, input: ExpenseInput) -> CommandRe
             category: id(&input.category_id, CategoryId::from_uuid)?,
             date: input.date,
             label: input.label,
+            account: optional_id(input.account_id.as_deref(), AccountId::from_uuid)?,
         };
         match optional_id(input.id.as_deref(), ExpenseId::from_uuid)? {
             Some(expense_id) => {
